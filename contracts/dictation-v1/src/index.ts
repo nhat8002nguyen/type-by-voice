@@ -12,3 +12,4 @@ export {
   type SessionOutput,
   type SessionStatus,
 } from './session-machine.js';
+export { startMockDictateServer } from './mock-server.js';
