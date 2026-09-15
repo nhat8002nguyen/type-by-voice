@@ -1,4 +1,10 @@
-import { SESSION_LIMITS, type Platform } from './constants.js';
+import {
+  CLOSE_CODES,
+  ERROR_CODES,
+  SESSION_LIMITS,
+  type ErrorCode,
+  type Platform,
+} from './constants.js';
 import type {
   ErrorMessage,
   FinalMessage,
@@ -42,6 +48,45 @@ function concat(chunks: Uint8Array[]): Uint8Array {
     offset += chunk.byteLength;
   }
   return out;
+}
+
+/** v1 estimate: 3 bytes ≈ 1 ms at ~24 kbps. Nest `api` may replace this with a real Ogg duration parser later without changing the error code. */
+const BYTES_PER_MS = 3;
+
+function estimateAudioMs(bytes: Uint8Array): number {
+  return bytes.length / BYTES_PER_MS;
+}
+
+const ERROR_MESSAGES: Record<ErrorCode, string> = {
+  unauthenticated: 'Missing, invalid, or expired token.',
+  quota_exceeded: 'Weekly limit reached.',
+  audio_cap_exceeded: 'Audio-minute ceiling reached.',
+  too_long: 'Audio exceeded maxDurationMs.',
+  invalid_request: 'Malformed message or unsupported audio parameters.',
+  rate_limited: 'Too many requests.',
+  provider_unavailable: 'Speech provider failed.',
+  internal: 'Unexpected server error.',
+  session_timeout: 'No audio or no stop received within the session window.',
+};
+
+function closeCodeFor(code: ErrorCode): number {
+  if (code === 'unauthenticated') {
+    return CLOSE_CODES.unauthenticated;
+  }
+  if (code === 'quota_exceeded') {
+    return CLOSE_CODES.quota_exceeded;
+  }
+  if (code === 'rate_limited') {
+    return CLOSE_CODES.rate_limited;
+  }
+  return CLOSE_CODES.normal;
+}
+
+function requestIdOf(data: unknown, fallback: string | undefined): string {
+  if (isRecord(data) && typeof data.requestId === 'string') {
+    return data.requestId;
+  }
+  return fallback ?? '';
 }
 
 function isRecord(data: unknown): data is Record<string, unknown> {
@@ -105,17 +150,46 @@ export class DictationSession {
     return [{ kind: 'send', message }];
   }
 
-  failTranscription(_code: 'provider_unavailable' | 'internal'): SessionOutput[] {
-    return [];
+  failTranscription(code: 'provider_unavailable' | 'internal'): SessionOutput[] {
+    if (this.#status !== 'stopping' || this.#requestId === undefined) {
+      return [];
+    }
+    return this.error(code, this.#requestId);
+  }
+
+  private error(
+    code: ErrorCode,
+    requestId: string,
+    details?: Record<string, unknown>,
+  ): SessionOutput[] {
+    this.#status = 'closed';
+    this.#audioChunks = [];
+    const message: ErrorMessage = {
+      type: 'error',
+      requestId,
+      code,
+      message: ERROR_MESSAGES[code],
+      retryable: ERROR_CODES[code].retryable,
+    };
+    if (details !== undefined) {
+      message.details = details;
+    }
+    return [
+      { kind: 'send', message },
+      { kind: 'close', code: closeCodeFor(code), reason: code },
+    ];
   }
 
   private handleBinary(bytes: Uint8Array): SessionOutput[] {
-    if (this.#status !== 'ready') {
+    if (this.#status === 'ready') {
+      this.#audioChunks.push(bytes);
+      this.#lastAudioAtMs = this.#nowMs();
       return [];
     }
-    this.#audioChunks.push(bytes);
-    this.#lastAudioAtMs = this.#nowMs();
-    return [];
+    if (this.#status === 'closed') {
+      return [];
+    }
+    return this.error('invalid_request', this.#requestId ?? '');
   }
 
   private handleText(data: unknown): SessionOutput[] {
@@ -135,19 +209,22 @@ export class DictationSession {
   }
 
   private handleStart(data: unknown): SessionOutput[] {
+    if (this.#status === 'ready' || this.#status === 'stopping') {
+      return this.error('invalid_request', requestIdOf(data, this.#requestId));
+    }
     if (this.#status !== 'open') {
       return [];
     }
     const result = validateStart(data);
     if (!result.ok) {
-      return [];
+      return this.error('invalid_request', requestIdOf(data, this.#requestId));
     }
     const start = result.value;
     if (
       start.platform !== this.#identity.platform ||
       start.deviceId !== this.#identity.deviceId
     ) {
-      return [];
+      return this.error('invalid_request', start.requestId);
     }
     this.#requestId = start.requestId;
     this.#audioChunks = [];
@@ -164,14 +241,19 @@ export class DictationSession {
   }
 
   private handleStop(data: Record<string, unknown>): SessionOutput[] {
-    if (this.#status !== 'ready' || this.#requestId === undefined) {
+    if (this.#status === 'closed' || this.#status === 'stopping') {
       return [];
     }
-    if (data.requestId !== this.#requestId) {
-      return [];
+    if (this.#status !== 'ready' || this.#requestId === undefined || data.requestId !== this.#requestId) {
+      return this.error('invalid_request', requestIdOf(data, this.#requestId));
     }
     const audio = concat(this.#audioChunks);
     this.#audioChunks = [];
+    if (estimateAudioMs(audio) > this.#maxDurationMs) {
+      return this.error('too_long', this.#requestId, {
+        maxDurationMs: this.#maxDurationMs,
+      });
+    }
     this.#status = 'stopping';
     return [
       {
@@ -187,7 +269,7 @@ export class DictationSession {
       return [];
     }
     if (this.#status === 'ready' && data.requestId !== this.#requestId) {
-      return [];
+      return this.error('invalid_request', requestIdOf(data, this.#requestId));
     }
     this.#audioChunks = [];
     this.#requestId = undefined;
