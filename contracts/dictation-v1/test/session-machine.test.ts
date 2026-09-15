@@ -172,3 +172,66 @@ describe('DictationSession errors', () => {
     });
   });
 });
+
+describe('DictationSession timeouts', () => {
+  it('times out if no audio arrives within 10s of ready', () => {
+    let now = 0;
+    const s = new DictationSession({
+      nowMs: () => now,
+      identity: {
+        userId: 'user-1',
+        platform: 'macos',
+        deviceId: '9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77',
+      },
+      quota,
+    });
+    s.handle({ kind: 'text', data: loadFixture('start.valid.json') });
+    now = 10_001;
+    const out = s.handle({ kind: 'tick', nowMs: now });
+    expect(out[0]).toMatchObject({
+      kind: 'send',
+      message: { type: 'error', code: 'session_timeout', retryable: true },
+    });
+    expect(s.status).toBe('closed');
+  });
+
+  it('does not time out first-audio if a binary frame arrived', () => {
+    let now = 0;
+    const s = new DictationSession({
+      nowMs: () => now,
+      identity: {
+        userId: 'user-1',
+        platform: 'macos',
+        deviceId: '9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77',
+      },
+      quota,
+    });
+    s.handle({ kind: 'text', data: loadFixture('start.valid.json') });
+    s.handle({ kind: 'binary', bytes: new Uint8Array([1]) });
+    now = 10_001;
+    expect(s.handle({ kind: 'tick', nowMs: now })).toEqual([]);
+    expect(s.status).toBe('ready');
+  });
+
+  it('times out if stop does not follow last audio within 30s', () => {
+    let now = 0;
+    const s = new DictationSession({
+      nowMs: () => now,
+      identity: {
+        userId: 'user-1',
+        platform: 'macos',
+        deviceId: '9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77',
+      },
+      quota,
+    });
+    s.handle({ kind: 'text', data: loadFixture('start.valid.json') });
+    now = 100;
+    s.handle({ kind: 'binary', bytes: new Uint8Array([1]) });
+    now = 100 + 30_001;
+    const out = s.handle({ kind: 'tick', nowMs: now });
+    expect(out[0]).toMatchObject({
+      kind: 'send',
+      message: { type: 'error', code: 'session_timeout', retryable: true },
+    });
+  });
+});

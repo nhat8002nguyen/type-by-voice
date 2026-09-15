@@ -121,7 +121,7 @@ export class DictationSession {
 
   handle(event: SessionEvent): SessionOutput[] {
     if (event.kind === 'tick') {
-      return [];
+      return this.handleTick(event.nowMs);
     }
     if (event.kind === 'binary') {
       return this.handleBinary(event.bytes);
@@ -178,6 +178,22 @@ export class DictationSession {
       { kind: 'send', message },
       { kind: 'close', code: closeCodeFor(code), reason: code },
     ];
+  }
+
+  private handleTick(nowMs: number): SessionOutput[] {
+    if (this.#status !== 'ready' || this.#readyAtMs === undefined) {
+      return [];
+    }
+    if (this.#lastAudioAtMs === undefined) {
+      if (nowMs - this.#readyAtMs >= SESSION_LIMITS.firstAudioTimeoutMs) {
+        return this.error('session_timeout', this.#requestId ?? '');
+      }
+      return [];
+    }
+    if (nowMs - this.#lastAudioAtMs >= SESSION_LIMITS.stopTimeoutMs) {
+      return this.error('session_timeout', this.#requestId ?? '');
+    }
+    return [];
   }
 
   private handleBinary(bytes: Uint8Array): SessionOutput[] {
