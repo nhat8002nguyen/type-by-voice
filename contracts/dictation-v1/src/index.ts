@@ -13,3 +13,10 @@ export {
   type SessionStatus,
 } from './session-machine.js';
 export { startMockDictateServer } from './mock-server.js';
+export {
+  percentile,
+  runOnce,
+  runHarness,
+  type StageTimings,
+  type HarnessReport,
+} from './latency-harness.js';
