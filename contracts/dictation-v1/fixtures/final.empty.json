@@ -1,0 +1,13 @@
+{
+  "type": "final",
+  "requestId": "3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f",
+  "text": "",
+  "wordCount": 0,
+  "audioMs": 11800,
+  "quota": {
+    "unit": "words",
+    "limit": 2000,
+    "used": 315,
+    "resetAt": "2026-09-18T04:12:00Z"
+  }
+}
