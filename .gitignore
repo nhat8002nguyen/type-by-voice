@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+.worktrees/
+.env
+.env.*
+*.log
+nestjs-microservices/
