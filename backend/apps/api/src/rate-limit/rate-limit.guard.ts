@@ -1,11 +1,12 @@
 import {
   CanActivate,
   ExecutionContext,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Optional,
   OnModuleDestroy,
-  TooManyRequestsException,
 } from '@nestjs/common';
 import Redis from 'ioredis';
 
@@ -73,8 +74,12 @@ export class AuthLimiter {
     this.#lockUntil.delete(email);
   }
 
+  isLocked(email: string): boolean {
+    return (this.#lockUntil.get(email) ?? 0) > this.#nowMs();
+  }
+
   isBlocked(email: string, ip: string): boolean {
-    if ((this.#lockUntil.get(email) ?? 0) > this.#nowMs()) {
+    if (this.isLocked(email)) {
       return true;
     }
     return (
@@ -151,13 +156,14 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
     const login = isLoginRequest(request);
 
     if (login && email && (await this.isLocked(email))) {
-      throw new TooManyRequestsException();
+      await this.recordFailure(email, ip);
+      throw tooManyRequests();
     }
     if (!(await this.consumeIp(ip))) {
-      throw new TooManyRequestsException();
+      throw tooManyRequests();
     }
     if (login && email && !(await this.consumeLoginEmail(email))) {
-      throw new TooManyRequestsException();
+      throw tooManyRequests();
     }
     return true;
   }
@@ -167,10 +173,8 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
       this.memory.recordFailure(email, ip);
       return;
     }
-    const n = await this.redis.incr(lockKey(email));
-    if (n >= FAILURES_TO_LOCK) {
-      await this.redis.expire(lockKey(email), lockSeconds(n));
-    }
+    await this.redis.incr(lockKey(email));
+    await this.redis.expire(lockKey(email), WINDOW_SEC);
   }
 
   async recordSuccess(email: string): Promise<void> {
@@ -183,14 +187,20 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
 
   async isLocked(email: string): Promise<boolean> {
     if (!this.redis) {
-      return this.memory.isBlocked(email, '');
+      return this.memory.isLocked(email);
     }
     const n = Number((await this.redis.get(lockKey(email))) ?? 0);
     if (n < FAILURES_TO_LOCK) {
       return false;
     }
     const ttl = await this.redis.ttl(lockKey(email));
-    return ttl > 0 || ttl === -1;
+    if (ttl === -1) {
+      return true;
+    }
+    if (ttl <= 0) {
+      return false;
+    }
+    return WINDOW_SEC - ttl < lockSeconds(n);
   }
 
   allowDictateUpgrade(ip: string): boolean {
@@ -218,10 +228,12 @@ async function incrExpire(
   limit: number,
 ): Promise<boolean> {
   const n = await redis.incr(key);
-  if (n === 1) {
-    await redis.expire(key, WINDOW_SEC);
-  }
+  await redis.expire(key, WINDOW_SEC);
   return n <= limit;
+}
+
+function tooManyRequests(): HttpException {
+  return new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
 }
 
 export function clientIp(request: {

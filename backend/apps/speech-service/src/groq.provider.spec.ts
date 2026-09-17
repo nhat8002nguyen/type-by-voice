@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createSpeechProvider,
   FakeSpeechProvider,
   GroqSpeechProvider,
   ProviderUnavailableError,
@@ -44,6 +45,27 @@ describe('GroqSpeechProvider', () => {
     });
     expect(result.text).toBe('the transcribed text');
     expect(provider.name).toBe('fake');
+  });
+
+  it('selects fake when SPEECH_PROVIDER is fake and Groq key is absent', () => {
+    const provider = createSpeechProvider({ SPEECH_PROVIDER: 'fake' });
+    expect(provider).toBeInstanceOf(FakeSpeechProvider);
+  });
+
+  it('selects groq when GROQ_API_KEY is present even if SPEECH_PROVIDER is fake', () => {
+    const provider = createSpeechProvider({
+      SPEECH_PROVIDER: 'fake',
+      GROQ_API_KEY: 'gsk_test',
+    });
+    expect(provider).toBeInstanceOf(GroqSpeechProvider);
+  });
+
+  it('selects groq when SPEECH_PROVIDER is groq and key is present', () => {
+    const provider = createSpeechProvider({
+      SPEECH_PROVIDER: 'groq',
+      GROQ_API_KEY: 'gsk_test',
+    });
+    expect(provider).toBeInstanceOf(GroqSpeechProvider);
   });
 
   it('maps 5xx to ProviderUnavailableError', async () => {

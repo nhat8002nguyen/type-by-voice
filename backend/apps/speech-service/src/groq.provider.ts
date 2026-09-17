@@ -1,6 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import type { SpeechProvider } from '@app/speech';
 
+export function createSpeechProvider(
+  env: NodeJS.Dict<string> = process.env,
+): SpeechProvider {
+  const apiKey = env.GROQ_API_KEY;
+  const requested = env.SPEECH_PROVIDER ?? 'fake';
+  if (apiKey) {
+    return new GroqSpeechProvider({ apiKey });
+  }
+  if (requested === 'fake') {
+    return new FakeSpeechProvider();
+  }
+  return new FakeSpeechProvider();
+}
+
 export class FakeSpeechProvider implements SpeechProvider {
   readonly name = 'fake';
 
