@@ -1,9 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { WorkflowsServiceModule } from './workflows-service.module.js';
+import {
+  ObserveInstrument,
+  WorkflowsServiceModule,
+} from './workflows-service.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(WorkflowsServiceModule);
+  const app = await NestFactory.create(WorkflowsServiceModule, {
+    instrument: ObserveInstrument,
+  });
   app.connectMicroservice<MicroserviceOptions>(
     {
       transport: Transport.RMQ,

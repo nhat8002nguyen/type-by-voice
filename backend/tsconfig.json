@@ -18,6 +18,26 @@
     "skipLibCheck": true,
     "strict": true,
     "strictPropertyInitialization": false,
+    "paths": {
+      "@app/inbox": [
+        "./libs/inbox/src/index.ts"
+      ],
+      "@app/inbox/*": [
+        "./libs/inbox/src/*"
+      ],
+      "@app/outbox": [
+        "./libs/outbox/src/index.ts"
+      ],
+      "@app/outbox/*": [
+        "./libs/outbox/src/*"
+      ],
+      "@app/tracing": [
+        "./libs/tracing/src/index.ts"
+      ],
+      "@app/tracing/*": [
+        "./libs/tracing/src/*"
+      ]
+    },
     "types": [
       "vitest/globals",
       "node"
@@ -39,6 +59,15 @@
     },
     {
       "path": "./apps/notifications-service/tsconfig.app.json"
+    },
+    {
+      "path": "./libs/inbox/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/outbox/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/tracing/tsconfig.lib.json"
     }
   ]
 }

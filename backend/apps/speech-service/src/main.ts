@@ -1,6 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { SpeechServiceModule } from './speech-service.module.js';
+import {
+  ObserveInstrument,
+  SpeechServiceModule,
+} from './speech-service.module.js';
 
 function natsServerUrl(): string {
   const host = process.env.NATS_SERVER_HOST ?? 'nats-server';
@@ -8,7 +11,9 @@ function natsServerUrl(): string {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(SpeechServiceModule);
+  const app = await NestFactory.create(SpeechServiceModule, {
+    instrument: ObserveInstrument,
+  });
   app.connectMicroservice<MicroserviceOptions>(
     {
       transport: Transport.NATS,

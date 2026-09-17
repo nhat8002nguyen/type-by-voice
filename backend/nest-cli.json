@@ -19,6 +19,15 @@
         "tsConfigPath": "apps/api/tsconfig.app.json"
       }
     },
+    "inbox": {
+      "type": "library",
+      "root": "libs/inbox",
+      "entryFile": "index",
+      "sourceRoot": "libs/inbox/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/inbox/tsconfig.lib.json"
+      }
+    },
     "notifications-service": {
       "type": "application",
       "root": "apps/notifications-service",
@@ -26,6 +35,15 @@
       "sourceRoot": "apps/notifications-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/notifications-service/tsconfig.app.json"
+      }
+    },
+    "outbox": {
+      "type": "library",
+      "root": "libs/outbox",
+      "entryFile": "index",
+      "sourceRoot": "libs/outbox/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/outbox/tsconfig.lib.json"
       }
     },
     "quota-service": {
@@ -44,6 +62,15 @@
       "sourceRoot": "apps/speech-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/speech-service/tsconfig.app.json"
+      }
+    },
+    "tracing": {
+      "type": "library",
+      "root": "libs/tracing",
+      "entryFile": "index",
+      "sourceRoot": "libs/tracing/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/tracing/tsconfig.lib.json"
       }
     },
     "workflows-service": {
