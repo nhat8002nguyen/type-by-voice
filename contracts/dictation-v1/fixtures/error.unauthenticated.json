@@ -1,0 +1,7 @@
+{
+  "type": "error",
+  "requestId": "3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f",
+  "code": "unauthenticated",
+  "message": "Missing, invalid, or expired token.",
+  "retryable": false
+}

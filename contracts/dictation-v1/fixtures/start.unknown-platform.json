@@ -1,0 +1,12 @@
+{
+  "type": "start",
+  "requestId": "3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f",
+  "codec": "opus",
+  "container": "ogg",
+  "sampleRate": 16000,
+  "channels": 1,
+  "language": "en",
+  "platform": "linux",
+  "clientVersion": "1.0.0+12",
+  "deviceId": "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77"
+}
