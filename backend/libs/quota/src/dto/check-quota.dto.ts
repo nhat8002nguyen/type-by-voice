@@ -14,7 +14,7 @@ export class CheckQuotaRequestDto {
   @IsString()
   clientVersion: string;
 
-  @IsString()
+  @IsUUID('4')
   deviceId: string;
 }
 
