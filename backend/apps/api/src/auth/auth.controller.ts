@@ -1,26 +1,18 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   HttpCode,
   HttpStatus,
   Post,
-  UsePipes,
-  ValidationPipe,
+  UseFilters,
 } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
+import { InvalidIdentityFilter } from './invalid-identity.filter.js';
 
 @Controller('v1/auth')
-@UsePipes(
-  new ValidationPipe({
-    transform: true,
-    whitelist: true,
-    exceptionFactory: () =>
-      new BadRequestException({ code: 'invalid_request' }),
-  }),
-)
+@UseFilters(InvalidIdentityFilter)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
