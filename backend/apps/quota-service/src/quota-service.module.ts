@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
 import { QuotaServiceController } from './quota-service.controller.js';
 import { QuotaServiceService } from './quota-service.service.js';
+import { QuotaService } from './quota.service.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -14,6 +15,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
   ],
   controllers: [QuotaServiceController],
-  providers: [QuotaServiceService],
+  providers: [QuotaServiceService, QuotaService],
+  exports: [QuotaService],
 })
 export class QuotaServiceModule {}
