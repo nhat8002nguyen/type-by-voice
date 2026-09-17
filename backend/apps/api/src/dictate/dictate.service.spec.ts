@@ -55,15 +55,13 @@ describe('DictateService', () => {
       ),
     };
     const speech = {
-      send: vi
-        .fn()
-        .mockReturnValue(
-          of({
-            text: 'the transcribed text',
-            provider: 'groq-whisper',
-            providerLatencyMs: 20,
-          }),
-        ),
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
     };
     const service = new DictateService(
       quota as never,
@@ -89,19 +87,17 @@ describe('DictateService', () => {
   it('cancel never calls speech or quota commit', async () => {
     const speech = { send: vi.fn() };
     const quota = {
-      send: vi
-        .fn()
-        .mockReturnValue(
-          of({
-            allowed: true,
-            quota: {
-              unit: 'words',
-              limit: 2000,
-              used: 0,
-              resetAt: '2026-09-18T04:12:00Z',
-            },
-          }),
-        ),
+      send: vi.fn().mockReturnValue(
+        of({
+          allowed: true,
+          quota: {
+            unit: 'words',
+            limit: 2000,
+            used: 0,
+            resetAt: '2026-09-18T04:12:00Z',
+          },
+        }),
+      ),
     };
     const service = new DictateService(
       quota as never,
@@ -121,19 +117,17 @@ describe('DictateService', () => {
 
   it('provider throw fails transcription as provider_unavailable', async () => {
     const quota = {
-      send: vi
-        .fn()
-        .mockReturnValue(
-          of({
-            allowed: true,
-            quota: {
-              unit: 'words',
-              limit: 2000,
-              used: 0,
-              resetAt: '2026-09-18T04:12:00Z',
-            },
-          }),
-        ),
+      send: vi.fn().mockReturnValue(
+        of({
+          allowed: true,
+          quota: {
+            unit: 'words',
+            limit: 2000,
+            used: 0,
+            resetAt: '2026-09-18T04:12:00Z',
+          },
+        }),
+      ),
     };
     const speech = {
       send: vi.fn().mockReturnValue(throwError(() => new Error('groq down'))),
@@ -174,15 +168,13 @@ describe('DictateService', () => {
       ),
     };
     const speech = {
-      send: vi
-        .fn()
-        .mockReturnValue(
-          of({
-            text: 'the transcribed text',
-            provider: 'groq-whisper',
-            providerLatencyMs: 20,
-          }),
-        ),
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
     };
     const service = new DictateService(
       quota as never,
@@ -223,15 +215,13 @@ describe('DictateService', () => {
       ),
     };
     const speech = {
-      send: vi
-        .fn()
-        .mockReturnValue(
-          of({
-            text: 'the transcribed text',
-            provider: 'groq-whisper',
-            providerLatencyMs: 20,
-          }),
-        ),
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
     };
     const outbox = {
       enqueue: vi.fn().mockRejectedValue(new Error('outbox down')),
@@ -275,15 +265,13 @@ describe('DictateService', () => {
       ),
     };
     const speech = {
-      send: vi
-        .fn()
-        .mockReturnValue(
-          of({
-            text: 'the transcribed text',
-            provider: 'groq-whisper',
-            providerLatencyMs: 20,
-          }),
-        ),
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
     };
     const outbox = outboxStub();
     const service = new DictateService(
@@ -339,15 +327,13 @@ describe('DictateService', () => {
       ),
     };
     const speech = {
-      send: vi
-        .fn()
-        .mockReturnValue(
-          of({
-            text: 'the transcribed text',
-            provider: 'groq-whisper',
-            providerLatencyMs: 20,
-          }),
-        ),
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
     };
     const outbox = outboxStub();
     const service = new DictateService(
@@ -377,6 +363,74 @@ describe('DictateService', () => {
       expect.objectContaining({
         payload: expect.objectContaining({ type: 'quota-warning' }),
       }),
+    );
+  });
+
+  it('still returns final when quota-email enqueue throws after commit', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === 'quota.check'
+            ? {
+                allowed: true,
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 1590,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              }
+            : {
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 1601,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
+    };
+    const outbox = {
+      enqueue: vi.fn(async (message: { type: string }) => {
+        if (message.type === 'notifications.email') {
+          throw new Error('notifications outbox down');
+        }
+        return message;
+      }),
+    };
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outbox as never,
+      { ...jwtUser(), email: 'a@b.co' },
+    );
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    const final = await service.onText(loadFixture('stop.valid.json'));
+    expect(final).toMatchObject({
+      type: 'final',
+      text: 'the transcribed text',
+      wordCount: 3,
+    });
+    expect(quota.send).toHaveBeenCalledWith(
+      'quota.commit',
+      expect.objectContaining({ wordCount: 3 }),
+    );
+    expect(outbox.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'workflows.create' }),
+    );
+    expect(outbox.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'notifications.email' }),
     );
   });
 });

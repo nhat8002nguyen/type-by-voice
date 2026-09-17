@@ -302,8 +302,9 @@ export class DictateService {
     }
 
     const wordCount = countWords(result.text);
+    let commit: CommitQuotaResponseDto;
     try {
-      const commit = await firstValueFrom(
+      commit = await firstValueFrom(
         this.#quota.send<CommitQuotaResponseDto, CommitQuotaRequestDto>(
           QUOTA_COMMIT_PATTERN,
           {
@@ -332,19 +333,19 @@ export class DictateService {
           audioMs,
         },
       });
-
-      await this.enqueueQuotaEmail(commit.quota);
-
-      return this.consume(
-        session.completeTranscription({
-          text: result.text,
-          audioMs,
-          quota: commit.quota,
-        }),
-      );
     } catch {
       return this.consume(session.failTranscription('internal'));
     }
+
+    await this.enqueueQuotaEmail(commit.quota).catch(() => undefined);
+
+    return this.consume(
+      session.completeTranscription({
+        text: result.text,
+        audioMs,
+        quota: commit.quota,
+      }),
+    );
   }
 
   private async enqueueQuotaEmail(quota: QuotaSnapshot): Promise<void> {
