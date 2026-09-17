@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/api/src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "builder": "rspack",
+    "tsConfigPath": "apps/api/tsconfig.app.json"
+  },
+  "monorepo": true,
+  "root": "apps/api",
+  "projects": {
+    "api": {
+      "type": "application",
+      "root": "apps/api",
+      "entryFile": "main",
+      "sourceRoot": "apps/api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/api/tsconfig.app.json"
+      }
+    },
+    "notifications-service": {
+      "type": "application",
+      "root": "apps/notifications-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/notifications-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/notifications-service/tsconfig.app.json"
+      }
+    },
+    "quota-service": {
+      "type": "application",
+      "root": "apps/quota-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/quota-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/quota-service/tsconfig.app.json"
+      }
+    },
+    "speech-service": {
+      "type": "application",
+      "root": "apps/speech-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/speech-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/speech-service/tsconfig.app.json"
+      }
+    },
+    "workflows-service": {
+      "type": "application",
+      "root": "apps/workflows-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/workflows-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/workflows-service/tsconfig.app.json"
+      }
+    }
+  }
+}

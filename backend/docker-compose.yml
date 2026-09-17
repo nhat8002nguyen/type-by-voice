@@ -1,0 +1,153 @@
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: ./Dockerfile.dev
+  image: type-by-voice-backend:dev
+
+services:
+  api:
+    <<: *app-base
+    command: npm run start:dev -- api
+    ports:
+      - 3000:3000
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_HOST=api-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=api
+      - NATS_SERVER_HOST=nats-server
+      - RABBITMQ_HOST=amqp://rabbitmq:5672
+      - REDIS_HOST=redis
+    volumes:
+      - ./libs:/usr/src/app/libs
+      - ./package.json:/usr/src/app/package.json
+      - ./package-lock.json:/usr/src/app/package-lock.json
+      - ./tsconfig.json:/usr/src/app/tsconfig.json
+      - ./nest-cli.json:/usr/src/app/nest-cli.json
+      - ./node_modules:/usr/src/app/node_modules
+      - ./apps/api:/usr/src/app/apps/api
+    depends_on:
+      - api-db
+      - quota-service
+      - speech-service
+      - workflows-service
+      - notifications-service
+      - nats-server
+      - rabbitmq
+      - redis
+  api-db:
+    image: postgres:18-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=api
+  quota-service:
+    <<: *app-base
+    command: npm run start:dev -- quota-service
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_HOST=quota-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=quota
+      - NATS_SERVER_HOST=nats-server
+      - RABBITMQ_HOST=amqp://rabbitmq:5672
+      - REDIS_HOST=redis
+    volumes:
+      - ./libs:/usr/src/app/libs
+      - ./package.json:/usr/src/app/package.json
+      - ./package-lock.json:/usr/src/app/package-lock.json
+      - ./tsconfig.json:/usr/src/app/tsconfig.json
+      - ./nest-cli.json:/usr/src/app/nest-cli.json
+      - ./node_modules:/usr/src/app/node_modules
+      - ./apps/quota-service:/usr/src/app/apps/quota-service
+    depends_on:
+      - quota-db
+      - nats-server
+  quota-db:
+    image: postgres:18-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=quota
+  speech-service:
+    <<: *app-base
+    command: npm run start:dev -- speech-service
+    environment:
+      - NODE_ENV=development
+      - NATS_SERVER_HOST=nats-server
+      - RABBITMQ_HOST=amqp://rabbitmq:5672
+      - REDIS_HOST=redis
+    volumes:
+      - ./libs:/usr/src/app/libs
+      - ./package.json:/usr/src/app/package.json
+      - ./package-lock.json:/usr/src/app/package-lock.json
+      - ./tsconfig.json:/usr/src/app/tsconfig.json
+      - ./nest-cli.json:/usr/src/app/nest-cli.json
+      - ./node_modules:/usr/src/app/node_modules
+      - ./apps/speech-service:/usr/src/app/apps/speech-service
+    depends_on:
+      - nats-server
+  workflows-service:
+    <<: *app-base
+    command: npm run start:dev -- workflows-service
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_HOST=workflows-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=workflows
+      - NATS_SERVER_HOST=nats-server
+      - RABBITMQ_HOST=amqp://rabbitmq:5672
+      - REDIS_HOST=redis
+    volumes:
+      - ./libs:/usr/src/app/libs
+      - ./package.json:/usr/src/app/package.json
+      - ./package-lock.json:/usr/src/app/package-lock.json
+      - ./tsconfig.json:/usr/src/app/tsconfig.json
+      - ./nest-cli.json:/usr/src/app/nest-cli.json
+      - ./node_modules:/usr/src/app/node_modules
+      - ./apps/workflows-service:/usr/src/app/apps/workflows-service
+    depends_on:
+      - workflows-db
+      - rabbitmq
+      - redis
+  workflows-db:
+    image: postgres:18-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=workflows
+  notifications-service:
+    <<: *app-base
+    command: npm run start:dev -- notifications-service
+    environment:
+      - NODE_ENV=development
+      - NATS_SERVER_HOST=nats-server
+      - RABBITMQ_HOST=amqp://rabbitmq:5672
+      - REDIS_HOST=redis
+    volumes:
+      - ./libs:/usr/src/app/libs
+      - ./package.json:/usr/src/app/package.json
+      - ./package-lock.json:/usr/src/app/package-lock.json
+      - ./tsconfig.json:/usr/src/app/tsconfig.json
+      - ./nest-cli.json:/usr/src/app/nest-cli.json
+      - ./node_modules:/usr/src/app/node_modules
+      - ./apps/notifications-service:/usr/src/app/apps/notifications-service
+    depends_on:
+      - rabbitmq
+  nats-server:
+    image: nats:latest
+    ports:
+      - 4222:4222
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - 5672:5672
+      - 15672:15672
+  redis:
+    image: redis:7-alpine
