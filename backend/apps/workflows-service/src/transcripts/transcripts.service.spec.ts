@@ -1,4 +1,8 @@
+import { randomUUID } from 'node:crypto';
+import { FindOperator } from 'typeorm';
 import { describe, expect, it } from 'vitest';
+import { decryptTranscript } from './transcript-crypto.js';
+import { Transcript } from './transcript.entity.js';
 import { TranscriptsService } from './transcripts.service.js';
 
 const body = {
@@ -114,4 +118,81 @@ describe('TranscriptsService', () => {
     expect(hits).toHaveLength(1);
     expect(hits[0].text).toBe('the transcribed text');
   });
+
+  it('create persists ciphertext through a TypeORM repository', async () => {
+    const rows: Transcript[] = [];
+    const repository = createInMemoryRepo(rows);
+    const service = new TranscriptsService(
+      Buffer.alloc(32, 7),
+      repository as never,
+    );
+    await service.create(body);
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0].ciphertext.includes(Buffer.from('the transcribed text')),
+    ).toBe(false);
+    expect(decryptTranscript(rows[0].ciphertext, Buffer.alloc(32, 7))).toBe(
+      'the transcribed text',
+    );
+    expect(await service.search('user-1', 'transcribed')).toHaveLength(1);
+  });
+
+  it('handleInboxCreate writes through the provided EntityManager', async () => {
+    const rows: Transcript[] = [];
+    const repository = createInMemoryRepo(rows);
+    const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
+    await service.handleInboxCreate(body, {
+      getRepository: () => repository,
+    } as never);
+    expect(rows).toHaveLength(1);
+    expect(
+      rows[0].ciphertext.includes(Buffer.from('the transcribed text')),
+    ).toBe(false);
+  });
+
+  it('inbox handler without text is a no-op when the row already exists', async () => {
+    const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
+    await service.create(body);
+    await service.handleInboxCreate({
+      userId: body.userId,
+      requestId: body.requestId,
+      wordCount: body.wordCount,
+      audioMs: body.audioMs,
+    });
+    expect(await service.search('user-1', 'transcribed')).toHaveLength(1);
+  });
 });
+
+type Row = { id?: string } & Record<string, unknown>;
+
+function createInMemoryRepo<T extends Row>(rows: T[]) {
+  const matches = (row: T, where: Record<string, unknown>): boolean =>
+    Object.entries(where).every(([key, expected]) => {
+      const actual = row[key];
+      if (expected instanceof FindOperator) {
+        if (expected.type === 'isNull') {
+          return actual === null || actual === undefined;
+        }
+        return false;
+      }
+      return actual === expected;
+    });
+
+  return {
+    create: (data: Partial<T>) => ({ ...data }) as T,
+    save: async (entity: T) => {
+      const saved = { ...entity, id: entity.id ?? randomUUID() } as T;
+      const index = rows.findIndex((row) => row.id === saved.id);
+      if (index >= 0) {
+        rows[index] = Object.assign(rows[index], saved);
+        return rows[index];
+      }
+      rows.push(saved);
+      return saved;
+    },
+    find: async (options: { where: Record<string, unknown> }) =>
+      rows.filter((row) => matches(row, options.where)),
+    findOne: async (options: { where: Record<string, unknown> }) =>
+      rows.find((row) => matches(row, options.where)) ?? null,
+  };
+}

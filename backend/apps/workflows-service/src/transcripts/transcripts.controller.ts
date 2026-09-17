@@ -64,10 +64,16 @@ export class TranscriptsController {
       return;
     }
 
+    await this.transcriptsService.create(dto);
     await this.inboxService.store({
       messageId,
       type: WORKFLOWS_CREATE_EVENT,
-      payload: dto as unknown as Record<string, unknown>,
+      payload: {
+        userId: dto.userId,
+        requestId: dto.requestId,
+        wordCount: dto.wordCount,
+        audioMs: dto.audioMs,
+      },
     });
     channel.ack(originalMessage);
   }

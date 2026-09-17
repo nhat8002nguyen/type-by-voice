@@ -2,7 +2,9 @@ import { InboxModule } from '@app/inbox';
 import { WORKFLOWS_CREATE_EVENT } from '@app/workflows';
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
+import type { Repository } from 'typeorm';
+import { Transcript } from './transcripts/transcript.entity.js';
 import { TranscriptsController } from './transcripts/transcripts.controller.js';
 import { TranscriptsService } from './transcripts/transcripts.service.js';
 import { WorkflowsServiceController } from './workflows-service.controller.js';
@@ -11,10 +13,13 @@ import { WorkflowsServiceService } from './workflows-service.service.js';
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
+  imports: [TypeOrmModule.forFeature([Transcript])],
   providers: [
     {
       provide: TranscriptsService,
-      useFactory: () => TranscriptsService.fromEnv(),
+      inject: [getRepositoryToken(Transcript)],
+      useFactory: (repository: Repository<Transcript>) =>
+        TranscriptsService.fromEnv(repository),
     },
   ],
   exports: [TranscriptsService],
@@ -51,8 +56,8 @@ class TranscriptsCoreModule {}
         take: 100,
         maxAttempts: 3,
         handlers: {
-          [WORKFLOWS_CREATE_EVENT]: (payload) =>
-            transcriptsService.handleInboxCreate(payload),
+          [WORKFLOWS_CREATE_EVENT]: (payload, em) =>
+            transcriptsService.handleInboxCreate(payload, em),
         },
       }),
     }),

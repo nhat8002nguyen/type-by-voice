@@ -1,6 +1,7 @@
 import type { CreateTranscriptDto } from '@app/workflows';
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { EntityManager, IsNull, QueryFailedError, Repository } from 'typeorm';
 import { decryptTranscript, encryptTranscript } from './transcript-crypto.js';
 import { Transcript } from './transcript.entity.js';
 
@@ -17,40 +18,67 @@ export type TranscriptListPage = {
   nextCursor?: string;
 };
 
+function isUniqueViolation(error: unknown): boolean {
+  if (!(error instanceof QueryFailedError)) {
+    return false;
+  }
+  const driverError = error.driverError as { code?: string };
+  return driverError.code === '23505';
+}
+
+export function parseTranscriptEncryptionKey(
+  hex = process.env.TRANSCRIPT_ENCRYPTION_KEY,
+): Buffer {
+  if (!hex || hex.length !== 64 || !/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error('TRANSCRIPT_ENCRYPTION_KEY must be 64 hex characters');
+  }
+  return Buffer.from(hex, 'hex');
+}
+
 @Injectable()
 export class TranscriptsService {
   private readonly logger = new Logger(TranscriptsService.name);
   private readonly byId = new Map<string, Transcript>();
   private readonly byRequestId = new Map<string, Transcript>();
 
-  constructor(private readonly key: Buffer) {}
+  constructor(
+    private readonly key: Buffer,
+    private readonly repository?: Repository<Transcript>,
+  ) {}
 
   static withMemory(key: Buffer): TranscriptsService {
     return new TranscriptsService(key);
   }
 
-  static fromEnv(): TranscriptsService {
-    const hex = process.env.TRANSCRIPT_ENCRYPTION_KEY;
-    if (!hex || hex.length !== 64 || !/^[0-9a-fA-F]+$/.test(hex)) {
-      throw new Error('TRANSCRIPT_ENCRYPTION_KEY must be 64 hex characters');
-    }
-    return new TranscriptsService(Buffer.from(hex, 'hex'));
+  static fromEnv(repository: Repository<Transcript>): TranscriptsService {
+    return new TranscriptsService(parseTranscriptEncryptionKey(), repository);
   }
 
-  async handleInboxCreate(payload: unknown): Promise<void> {
+  async handleInboxCreate(payload: unknown, em?: EntityManager): Promise<void> {
     const dto = payload as CreateTranscriptDto;
     this.logger.log(`requestId=${dto.requestId} wordCount=${dto.wordCount}`);
-    await this.create(dto);
+    if (typeof dto.text === 'string') {
+      await this.create(dto, em);
+      return;
+    }
+    const existing = await this.findByRequestId(dto.requestId, em);
+    if (existing) {
+      return;
+    }
+    throw new Error(`transcript missing for requestId=${dto.requestId}`);
   }
 
-  async create(input: {
-    userId: string;
-    requestId: string;
-    text: string;
-    wordCount: number;
-    audioMs: number;
-  }): Promise<PublicTranscript> {
-    const existing = this.byRequestId.get(input.requestId);
+  async create(
+    input: {
+      userId: string;
+      requestId: string;
+      text: string;
+      wordCount: number;
+      audioMs: number;
+    },
+    em?: EntityManager,
+  ): Promise<PublicTranscript> {
+    const existing = await this.findByRequestId(input.requestId, em);
     if (existing) {
       return this.toPublic(existing);
     }
@@ -64,20 +92,18 @@ export class TranscriptsService {
     row.audioMs = input.audioMs;
     row.createdAt = new Date();
     row.deletedAt = null;
-    this.byId.set(row.id, row);
-    this.byRequestId.set(row.requestId, row);
-    return this.toPublic(row);
+    return this.toPublic(await this.persist(row, em));
   }
 
   async search(userId: string, q: string): Promise<PublicTranscript[]> {
     const needle = q.toLowerCase();
-    return this.visibleFor(userId)
+    return (await this.loadVisible(userId))
       .map((row) => this.toPublic(row))
       .filter((item) => item.text.toLowerCase().includes(needle));
   }
 
   async get(userId: string, id: string): Promise<PublicTranscript | null> {
-    const row = this.byId.get(id);
+    const row = await this.findById(id);
     if (!row || row.userId !== userId || row.deletedAt) {
       return null;
     }
@@ -85,22 +111,23 @@ export class TranscriptsService {
   }
 
   async delete(userId: string, id: string): Promise<void> {
-    const row = this.byId.get(id);
+    const row = await this.findById(id);
     if (!row || row.userId !== userId || row.deletedAt) {
       return;
     }
     row.deletedAt = new Date();
+    await this.persist(row);
   }
 
   async export(userId: string): Promise<PublicTranscript[]> {
-    return this.visibleFor(userId).map((row) => this.toPublic(row));
+    return (await this.loadVisible(userId)).map((row) => this.toPublic(row));
   }
 
   async list(
     userId: string,
     options: { cursor?: string; limit: number },
   ): Promise<TranscriptListPage> {
-    const rows = this.visibleFor(userId).sort(compareNewestFirst);
+    const rows = (await this.loadVisible(userId)).sort(compareNewestFirst);
     let start = 0;
     if (options.cursor) {
       const index = rows.findIndex((row) => row.id === options.cursor);
@@ -116,10 +143,71 @@ export class TranscriptsService {
     };
   }
 
-  private visibleFor(userId: string): Transcript[] {
-    return [...this.byId.values()].filter(
-      (row) => row.userId === userId && !row.deletedAt,
-    );
+  private store(em?: EntityManager): Repository<Transcript> | undefined {
+    if (em) {
+      return em.getRepository(Transcript);
+    }
+    return this.repository;
+  }
+
+  private async findByRequestId(
+    requestId: string,
+    em?: EntityManager,
+  ): Promise<Transcript | undefined> {
+    const repository = this.store(em);
+    if (!repository) {
+      return this.byRequestId.get(requestId);
+    }
+    return (await repository.findOne({ where: { requestId } })) ?? undefined;
+  }
+
+  private async findById(
+    id: string,
+    em?: EntityManager,
+  ): Promise<Transcript | undefined> {
+    const repository = this.store(em);
+    if (!repository) {
+      return this.byId.get(id);
+    }
+    return (await repository.findOne({ where: { id } })) ?? undefined;
+  }
+
+  private async loadVisible(
+    userId: string,
+    em?: EntityManager,
+  ): Promise<Transcript[]> {
+    const repository = this.store(em);
+    if (!repository) {
+      return [...this.byId.values()].filter(
+        (row) => row.userId === userId && !row.deletedAt,
+      );
+    }
+    return repository.find({
+      where: { userId, deletedAt: IsNull() },
+    });
+  }
+
+  private async persist(
+    row: Transcript,
+    em?: EntityManager,
+  ): Promise<Transcript> {
+    const repository = this.store(em);
+    if (!repository) {
+      this.byId.set(row.id, row);
+      this.byRequestId.set(row.requestId, row);
+      return row;
+    }
+    try {
+      return await repository.save(row);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const existing = await this.findByRequestId(row.requestId, em);
+        if (existing) {
+          return existing;
+        }
+      }
+      throw error;
+    }
   }
 
   private toPublic(row: Transcript): PublicTranscript {

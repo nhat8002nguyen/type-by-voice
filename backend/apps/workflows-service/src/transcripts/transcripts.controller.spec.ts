@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RmqContext } from '@nestjs/microservices';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { InboxService } from '../../../../libs/inbox/src/inbox.service.js';
 import { WORKFLOWS_CREATE_EVENT } from '../../../../libs/workflows/src/tokens.js';
@@ -57,7 +58,7 @@ describe('TranscriptsController', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('stores the inbox row and acks without creating', async () => {
+  it('persists ciphertext then stores inbox payload without plaintext', async () => {
     const create = vi.spyOn(transcriptsService, 'create');
     const { context, channel } = contextWith({
       properties: { messageId: 'outbox:9' },
@@ -65,15 +66,24 @@ describe('TranscriptsController', () => {
 
     await controller.create(dto, context);
 
-    expect(inboxService.store).toHaveBeenCalledWith({
+    expect(create).toHaveBeenCalledWith(dto);
+    expect(inboxService.store).toHaveBeenCalledOnce();
+    const stored = inboxService.store.mock.calls[0][0] as {
+      messageId: string;
+      type: string;
+      payload: Record<string, unknown>;
+    };
+    expect(stored).toMatchObject({
       messageId: 'outbox:9',
       type: WORKFLOWS_CREATE_EVENT,
-      payload: dto,
     });
+    expect(stored.payload).not.toHaveProperty('text');
+    expect(JSON.stringify(stored.payload)).not.toContain(
+      'the transcribed text',
+    );
     expect(channel.ack).toHaveBeenCalledWith({
       properties: { messageId: 'outbox:9' },
     });
-    expect(create).not.toHaveBeenCalled();
   });
 
   it('does not ack when store fails', async () => {
@@ -112,5 +122,13 @@ describe('TranscriptsController', () => {
       await controller.search({ userId: 'user-1', q: 'transcribed' }),
     ).toHaveLength(0);
     expect(await controller.export({ userId: 'user-1' })).toHaveLength(0);
+  });
+
+  it('compose documents a 64-hex TRANSCRIPT_ENCRYPTION_KEY for workflows-service', () => {
+    const compose = readFileSync(
+      new URL('../../../../docker-compose.yml', import.meta.url),
+      'utf8',
+    );
+    expect(compose).toMatch(/TRANSCRIPT_ENCRYPTION_KEY=[0-9a-fA-F]{64}/);
   });
 });

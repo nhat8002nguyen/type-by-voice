@@ -104,6 +104,8 @@ services:
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
+      # local/dev AES-256 key: 32 bytes of 0x07 as 64 hex chars
+      - TRANSCRIPT_ENCRYPTION_KEY=0707070707070707070707070707070707070707070707070707070707070707
     volumes:
       - ./libs:/usr/src/app/libs
       - ./package.json:/usr/src/app/package.json
