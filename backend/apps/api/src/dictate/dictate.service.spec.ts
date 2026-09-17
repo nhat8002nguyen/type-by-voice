@@ -69,6 +69,59 @@ describe('DictateService', () => {
     expect(error).toMatchObject({ type: 'error', code: 'provider_unavailable' });
     expect(quota.send).not.toHaveBeenCalledWith('quota.commit', expect.anything());
   });
+
+  it('quota commit throw fails transcription as internal', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        pattern === 'quota.commit'
+          ? throwError(() => new Error('quota down'))
+          : of({
+              allowed: true,
+              quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' },
+            }),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({ text: 'the transcribed text', provider: 'groq-whisper', providerLatencyMs: 20 }),
+      ),
+    };
+    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    const error = await service.onText(loadFixture('stop.valid.json'));
+    expect(error).toMatchObject({ type: 'error', code: 'internal' });
+    expect(service.takePendingClose()?.reason).toBe('internal');
+  });
+
+  it('outbox enqueue throw fails transcription as internal', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === 'quota.check'
+            ? {
+                allowed: true,
+                quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' },
+              }
+            : { quota: { unit: 'words', limit: 2000, used: 3, resetAt: '2026-09-18T04:12:00Z' } },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({ text: 'the transcribed text', provider: 'groq-whisper', providerLatencyMs: 20 }),
+      ),
+    };
+    const outbox = {
+      enqueue: vi.fn().mockRejectedValue(new Error('outbox down')),
+    };
+    const service = new DictateService(quota as never, speech as never, outbox as never, jwtUser());
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    const error = await service.onText(loadFixture('stop.valid.json'));
+    expect(error).toMatchObject({ type: 'error', code: 'internal' });
+    expect(service.takePendingClose()?.reason).toBe('internal');
+  });
 });
 
 function jwtUser() {

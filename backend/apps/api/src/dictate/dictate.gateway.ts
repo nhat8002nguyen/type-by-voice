@@ -76,6 +76,66 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
   ) {}
 
   async handleConnection(client: DictateSocket, req: IncomingMessage): Promise<void> {
+    const untilAuth = this.bindInbound(client);
+    try {
+      await this.authenticateAndAttach(client, req);
+    } finally {
+      untilAuth.release();
+    }
+  }
+
+  handleDisconnect(client: DictateSocket): void {
+    this.clearTick(client);
+    const service = client.dictateService;
+    if (service) {
+      this.registry.remove(service.userId, service.sessionKey);
+    }
+    client.dictateService = undefined;
+  }
+
+  async handleMessage(client: DictateSocket, data: SocketData): Promise<void> {
+    const service = client.dictateService;
+    if (!service) {
+      return;
+    }
+    client.lastActivityMs = Date.now();
+    try {
+      const buffer = toBuffer(data);
+      const message =
+        Buffer.isBuffer(buffer) && !isUtf8Json(buffer)
+          ? await service.onBinary(buffer)
+          : await service.onText(this.parseText(buffer));
+      this.flush(client, service, message);
+    } catch (error) {
+      this.flush(client, service, service.failUnexpected(error));
+    } finally {
+      client.lastActivityMs = Date.now();
+    }
+  }
+
+  private bindInbound(client: DictateSocket): { release: () => void } {
+    let releaseAuth!: () => void;
+    const untilAuth = new Promise<void>((resolve) => {
+      releaseAuth = resolve;
+    });
+    client.lastActivityMs = Date.now();
+    client.messageChain = Promise.resolve();
+    client.on('message', (data) => {
+      client.lastActivityMs = Date.now();
+      client.messageChain = (client.messageChain ?? Promise.resolve())
+        .then(() => untilAuth)
+        .then(() => this.handleMessage(client, data))
+        .catch((error) => {
+          this.handleProcessingError(client, error);
+        });
+    });
+    return { release: () => releaseAuth() };
+  }
+
+  private async authenticateAndAttach(
+    client: DictateSocket,
+    req: IncomingMessage,
+  ): Promise<void> {
     const token = bearerToken(req.headers.authorization);
     if (!token) {
       client.close(closeCodeForAuthError());
@@ -117,7 +177,7 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return;
     }
 
-    const service = new DictateService(
+    client.dictateService = new DictateService(
       this.quota,
       this.speech,
       this.outbox,
@@ -131,50 +191,13 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
       this.cache,
       this.registry,
     );
-    client.dictateService = service;
-    client.lastActivityMs = Date.now();
-    client.messageChain = Promise.resolve();
     client.dictateTimer = setInterval(() => {
-      void this.pumpTick(client);
-    }, TICK_MS);
-
-    client.on('message', (data) => {
       client.messageChain = (client.messageChain ?? Promise.resolve())
-        .then(() => this.handleMessage(client, data))
-        .catch(() => undefined);
-    });
-  }
-
-  handleDisconnect(client: DictateSocket): void {
-    if (client.dictateTimer) {
-      clearInterval(client.dictateTimer);
-      client.dictateTimer = undefined;
-    }
-    const service = client.dictateService;
-    if (service) {
-      this.registry.remove(service.userId, service.sessionKey);
-    }
-    client.dictateService = undefined;
-  }
-
-  async handleMessage(client: DictateSocket, data: SocketData): Promise<void> {
-    const service = client.dictateService;
-    if (!service) {
-      return;
-    }
-    client.lastActivityMs = Date.now();
-    const buffer = toBuffer(data);
-    let message: ServerTextMessage | undefined;
-    try {
-      if (Buffer.isBuffer(buffer) && !isUtf8Json(buffer)) {
-        message = await service.onBinary(buffer);
-      } else {
-        message = await service.onText(JSON.parse(buffer.toString('utf8')));
-      }
-    } catch {
-      return;
-    }
-    this.flush(client, service, message);
+        .then(() => this.pumpTick(client))
+        .catch((error) => {
+          this.handleProcessingError(client, error);
+        });
+    }, TICK_MS);
   }
 
   private async pumpTick(client: DictateSocket): Promise<void> {
@@ -183,19 +206,33 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return;
     }
     const nowMs = Date.now();
-    if (
-      client.lastActivityMs !== undefined &&
-      nowMs - client.lastActivityMs >= SESSION_LIMITS.idleTimeoutMs
-    ) {
-      client.close(CLOSE_CODES.normal);
-      return;
+    if (!service.isBusy) {
+      if (
+        client.lastActivityMs !== undefined &&
+        nowMs - client.lastActivityMs >= SESSION_LIMITS.idleTimeoutMs
+      ) {
+        client.close(CLOSE_CODES.normal);
+        return;
+      }
     }
     try {
       const message = await service.onTick(nowMs);
       this.flush(client, service, message);
-    } catch {
+    } catch (error) {
+      this.flush(client, service, service.failUnexpected(error));
+    }
+  }
+
+  private handleProcessingError(client: DictateSocket, error: unknown): void {
+    const service = client.dictateService;
+    if (!service) {
       return;
     }
+    this.flush(client, service, service.failUnexpected(error));
+  }
+
+  private parseText(buffer: Buffer): unknown {
+    return JSON.parse(buffer.toString('utf8'));
   }
 
   private flush(
@@ -212,6 +249,13 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
     const close = service.takePendingClose();
     if (close) {
       client.close(close.code, close.reason);
+    }
+  }
+
+  private clearTick(client: DictateSocket): void {
+    if (client.dictateTimer) {
+      clearInterval(client.dictateTimer);
+      client.dictateTimer = undefined;
     }
   }
 }

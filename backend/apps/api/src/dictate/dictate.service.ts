@@ -94,6 +94,21 @@ export class DictateService {
     return this.#user.userId;
   }
 
+  get isBusy(): boolean {
+    return this.#session?.status === 'stopping';
+  }
+
+  failUnexpected(error?: unknown): ServerTextMessage {
+    const requestId = this.#session?.requestId ?? '';
+    if (error instanceof SyntaxError) {
+      return this.protocolError('invalid_request', requestId);
+    }
+    if (this.#session?.status === 'stopping') {
+      return this.applyOutputs(this.#session.failTranscription('internal')) ?? this.protocolError('internal', requestId);
+    }
+    return this.protocolError('internal', requestId);
+  }
+
   takePendingClose(): DictateClose | undefined {
     const close = this.#pendingClose;
     this.#pendingClose = undefined;
@@ -154,18 +169,24 @@ export class DictateService {
       return this.protocolError('invalid_request', data.requestId);
     }
 
-    const check = await firstValueFrom(
-      this.#quota.send<CheckQuotaResponseDto, CheckQuotaRequestDto>(
-        QUOTA_CHECK_PATTERN,
-        {
-          userId: this.#user.userId,
-          sessionId: this.#user.sessionId,
-          platform: this.#user.platform,
-          clientVersion: this.#user.clientVersion,
-          deviceId: this.#user.deviceId,
-        },
-      ),
-    );
+    let check: CheckQuotaResponseDto;
+    try {
+      check = await firstValueFrom(
+        this.#quota.send<CheckQuotaResponseDto, CheckQuotaRequestDto>(
+          QUOTA_CHECK_PATTERN,
+          {
+            userId: this.#user.userId,
+            sessionId: this.#user.sessionId,
+            platform: this.#user.platform,
+            clientVersion: this.#user.clientVersion,
+            deviceId: this.#user.deviceId,
+          },
+        ),
+      );
+    } catch {
+      this.#registry?.remove(this.#user.userId, this.sessionKey);
+      return this.protocolError('internal', data.requestId);
+    }
 
     if (!check.allowed) {
       this.#registry?.remove(this.#user.userId, this.sessionKey);
@@ -204,21 +225,38 @@ export class DictateService {
   ): Promise<ServerTextMessage | undefined> {
     let last: ServerTextMessage | undefined;
     for (const output of outputs) {
-      if (output.kind === 'send') {
-        last = output.message;
-        if (output.message.type === 'final' || output.message.type === 'error') {
-          this.#cache.remember(output.message.requestId, output.message);
-          this.#registry?.remove(this.#user.userId, this.sessionKey);
-        }
+      if (output.kind === 'transcribe') {
+        last = await this.transcribeAndFinalize(output);
         continue;
       }
-      if (output.kind === 'close') {
-        this.#pendingClose = { code: output.code, reason: output.reason };
-        continue;
-      }
-      last = await this.transcribeAndFinalize(output);
+      last = this.applyOutput(output) ?? last;
     }
     return last;
+  }
+
+  private applyOutputs(outputs: SessionOutput[]): ServerTextMessage | undefined {
+    let last: ServerTextMessage | undefined;
+    for (const output of outputs) {
+      if (output.kind === 'transcribe') {
+        continue;
+      }
+      last = this.applyOutput(output) ?? last;
+    }
+    return last;
+  }
+
+  private applyOutput(
+    output: Extract<SessionOutput, { kind: 'send' } | { kind: 'close' }>,
+  ): ServerTextMessage | undefined {
+    if (output.kind === 'send') {
+      if (output.message.type === 'final' || output.message.type === 'error') {
+        this.#cache.remember(output.message.requestId, output.message);
+        this.#registry?.remove(this.#user.userId, this.sessionKey);
+      }
+      return output.message;
+    }
+    this.#pendingClose = { code: output.code, reason: output.reason };
+    return undefined;
   }
 
   private async transcribeAndFinalize(output: {
@@ -247,43 +285,47 @@ export class DictateService {
     }
 
     const wordCount = countWords(result.text);
-    const commit = await firstValueFrom(
-      this.#quota.send<CommitQuotaResponseDto, CommitQuotaRequestDto>(
-        QUOTA_COMMIT_PATTERN,
-        {
+    try {
+      const commit = await firstValueFrom(
+        this.#quota.send<CommitQuotaResponseDto, CommitQuotaRequestDto>(
+          QUOTA_COMMIT_PATTERN,
+          {
+            userId: this.#user.userId,
+            requestId: output.requestId,
+            sessionId: this.#user.sessionId,
+            platform: this.#user.platform,
+            clientVersion: this.#user.clientVersion,
+            audioMs,
+            wordCount,
+            provider: result.provider,
+            providerLatencyMs: result.providerLatencyMs,
+            estimatedCostMicros: estimatedCostMicros(audioMs),
+          },
+        ),
+      );
+
+      await this.#outbox.enqueue({
+        type: WORKFLOWS_CREATE_EVENT,
+        target: WORKFLOWS_SERVICE,
+        payload: {
           userId: this.#user.userId,
           requestId: output.requestId,
-          sessionId: this.#user.sessionId,
-          platform: this.#user.platform,
-          clientVersion: this.#user.clientVersion,
-          audioMs,
+          text: result.text,
           wordCount,
-          provider: result.provider,
-          providerLatencyMs: result.providerLatencyMs,
-          estimatedCostMicros: estimatedCostMicros(audioMs),
+          audioMs,
         },
-      ),
-    );
+      });
 
-    const finalized = session.completeTranscription({
-      text: result.text,
-      audioMs,
-      quota: commit.quota,
-    });
-
-    await this.#outbox.enqueue({
-      type: WORKFLOWS_CREATE_EVENT,
-      target: WORKFLOWS_SERVICE,
-      payload: {
-        userId: this.#user.userId,
-        requestId: output.requestId,
-        text: result.text,
-        wordCount,
-        audioMs,
-      },
-    });
-
-    return this.consume(finalized);
+      return this.consume(
+        session.completeTranscription({
+          text: result.text,
+          audioMs,
+          quota: commit.quota,
+        }),
+      );
+    } catch {
+      return this.consume(session.failTranscription('internal'));
+    }
   }
 
   private protocolError(
