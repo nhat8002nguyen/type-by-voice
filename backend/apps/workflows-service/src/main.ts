@@ -1,3 +1,4 @@
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import {
@@ -5,10 +6,16 @@ import {
   WorkflowsServiceModule,
 } from './workflows-service.module.js';
 
+function natsServerUrl(): string {
+  const host = process.env.NATS_SERVER_HOST ?? 'nats-server';
+  return host.includes(':') ? host : `${host}:4222`;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(WorkflowsServiceModule, {
     instrument: ObserveInstrument,
   });
+  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.connectMicroservice<MicroserviceOptions>(
     {
       transport: Transport.RMQ,
@@ -16,6 +23,16 @@ async function bootstrap() {
         urls: [process.env.RABBITMQ_HOST ?? 'amqp://rabbitmq:5672'],
         queue: 'workflows-service',
         noAck: false,
+      },
+    },
+    { inheritAppConfig: true },
+  );
+  app.connectMicroservice<MicroserviceOptions>(
+    {
+      transport: Transport.NATS,
+      options: {
+        servers: [natsServerUrl()],
+        queue: 'workflows-service',
       },
     },
     { inheritAppConfig: true },
