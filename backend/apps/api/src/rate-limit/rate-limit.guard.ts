@@ -228,7 +228,9 @@ async function incrExpire(
   limit: number,
 ): Promise<boolean> {
   const n = await redis.incr(key);
-  await redis.expire(key, WINDOW_SEC);
+  if (n === 1) {
+    await redis.expire(key, WINDOW_SEC);
+  }
   return n <= limit;
 }
 
