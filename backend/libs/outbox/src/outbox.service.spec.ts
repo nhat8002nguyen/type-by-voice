@@ -6,12 +6,19 @@ import { OutboxService } from './outbox.service.js';
 
 describe('OutboxService', () => {
   let service: OutboxService;
-  let repository: { find: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  let repository: {
+    find: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    save: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     repository = {
       find: vi.fn(),
       update: vi.fn(),
+      create: vi.fn(),
+      save: vi.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -51,5 +58,27 @@ describe('OutboxService', () => {
     await service.markAsProcessed(7);
 
     expect(repository.update).toHaveBeenCalledWith(7, { status: 'processed' });
+  });
+
+  it('inserts a pending outbox row', async () => {
+    const created = { type: 'notifications.email' };
+    const saved = { id: 3, status: 'pending' };
+    repository.create.mockReturnValue(created);
+    repository.save.mockResolvedValue(saved);
+
+    const result = await service.enqueue({
+      type: 'notifications.email',
+      payload: { type: 'verify-email', userId: 'user-1', email: 'a@b.co' },
+      target: Symbol('NOTIFICATIONS_SERVICE'),
+    });
+
+    expect(repository.create).toHaveBeenCalledWith({
+      type: 'notifications.email',
+      payload: { type: 'verify-email', userId: 'user-1', email: 'a@b.co' },
+      target: 'NOTIFICATIONS_SERVICE',
+      status: 'pending',
+    });
+    expect(repository.save).toHaveBeenCalledWith(created);
+    expect(result).toEqual(saved);
   });
 });

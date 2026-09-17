@@ -1,6 +1,7 @@
 import type { Platform } from '@type-by-voice/dictation-v1';
 import {
   Column,
+  CreateDateColumn,
   Entity,
   ForeignKey,
   Index,
@@ -35,6 +36,9 @@ export class Session {
 
   @Column({ name: 'user_agent', type: 'text', nullable: true })
   userAgent: string | null;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt: Date;
 
   @Column({ name: 'expires_at', type: 'timestamptz' })
   expiresAt: Date;

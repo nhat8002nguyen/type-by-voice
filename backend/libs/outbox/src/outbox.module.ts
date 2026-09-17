@@ -15,14 +15,20 @@ import { OutboxService } from './outbox.service.js';
 
 @Module({})
 export class OutboxModule {
+  static forFeature(): DynamicModule {
+    return {
+      module: OutboxModule,
+      imports: [TypeOrmModule.forFeature([Outbox])],
+      providers: [OutboxService],
+      exports: [OutboxService],
+    };
+  }
+
   /** OutboxModule.register({ target, clientToken }) injects that RMQ client. */
   static register(options: OutboxRegisterOptions): DynamicModule {
     return {
       module: OutboxModule,
-      imports: [
-        ScheduleModule.forRoot(),
-        TypeOrmModule.forFeature([Outbox]),
-      ],
+      imports: [ScheduleModule.forRoot(), TypeOrmModule.forFeature([Outbox])],
       providers: [
         OutboxService,
         { provide: OUTBOX_TARGET, useValue: options.target },

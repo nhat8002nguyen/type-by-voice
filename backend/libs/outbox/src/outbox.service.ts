@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Outbox } from './entities/outbox.entity.js';
+import { outboxTargetName } from './outbox.constants.js';
 
 @Injectable()
 export class OutboxService {
@@ -9,6 +10,21 @@ export class OutboxService {
     @InjectRepository(Outbox)
     private readonly outboxRepository: Repository<Outbox>,
   ) {}
+
+  async enqueue(message: {
+    type: string;
+    payload: Record<string, unknown>;
+    target: string | symbol;
+  }): Promise<Outbox> {
+    return this.outboxRepository.save(
+      this.outboxRepository.create({
+        type: message.type,
+        payload: message.payload,
+        target: outboxTargetName(message.target),
+        status: 'pending',
+      }),
+    );
+  }
 
   async getPendingOutboxMessages(options: {
     target: string;

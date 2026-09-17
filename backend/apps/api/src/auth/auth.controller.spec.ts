@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAppValidationPipe } from '../create-app-validation-pipe.js';
+import { AccessAuthGuard } from './access-auth.guard.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 
@@ -30,10 +31,14 @@ describe('Auth HTTP identity', () => {
           useValue: {
             register: vi.fn(),
             login: vi.fn(),
+            refresh: vi.fn(),
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(AccessAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = module.createNestApplication();
     app.useGlobalPipes(createAppValidationPipe());
@@ -56,6 +61,20 @@ describe('Auth HTTP identity', () => {
     const response = await request(app.getHttpServer())
       .post('/v1/auth/login')
       .send({ ...validBody, deviceId: 'not-a-uuid' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: 'invalid_request' });
+  });
+
+  it('returns invalid_request for refresh with an unknown platform', async () => {
+    await createApp();
+    const response = await request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .send({
+        ...validBody,
+        refreshToken: 'unused',
+        platform: 'linux',
+      });
 
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ code: 'invalid_request' });
