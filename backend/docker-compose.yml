@@ -2,6 +2,8 @@ x-app-base: &app-base
   build:
     context: .
     dockerfile: ./Dockerfile.dev
+    additional_contexts:
+      contracts: ../contracts/dictation-v1
   image: type-by-voice-backend:dev
 
 services:
@@ -20,13 +22,13 @@ services:
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
+      - "NODE_OPTIONS=--experimental-strip-types --import /usr/src/contracts/dictation-v1/ts-resolve.ts"
     volumes:
       - ./libs:/usr/src/app/libs
       - ./package.json:/usr/src/app/package.json
       - ./package-lock.json:/usr/src/app/package-lock.json
       - ./tsconfig.json:/usr/src/app/tsconfig.json
       - ./nest-cli.json:/usr/src/app/nest-cli.json
-      - ./node_modules:/usr/src/app/node_modules
       - ./apps/api:/usr/src/app/apps/api
     depends_on:
       - api-db
@@ -62,7 +64,6 @@ services:
       - ./package-lock.json:/usr/src/app/package-lock.json
       - ./tsconfig.json:/usr/src/app/tsconfig.json
       - ./nest-cli.json:/usr/src/app/nest-cli.json
-      - ./node_modules:/usr/src/app/node_modules
       - ./apps/quota-service:/usr/src/app/apps/quota-service
     depends_on:
       - quota-db
@@ -89,7 +90,6 @@ services:
       - ./package-lock.json:/usr/src/app/package-lock.json
       - ./tsconfig.json:/usr/src/app/tsconfig.json
       - ./nest-cli.json:/usr/src/app/nest-cli.json
-      - ./node_modules:/usr/src/app/node_modules
       - ./apps/speech-service:/usr/src/app/apps/speech-service
     depends_on:
       - nats-server
@@ -114,7 +114,6 @@ services:
       - ./package-lock.json:/usr/src/app/package-lock.json
       - ./tsconfig.json:/usr/src/app/tsconfig.json
       - ./nest-cli.json:/usr/src/app/nest-cli.json
-      - ./node_modules:/usr/src/app/node_modules
       - ./apps/workflows-service:/usr/src/app/apps/workflows-service
     depends_on:
       - workflows-db
@@ -146,7 +145,6 @@ services:
       - ./package-lock.json:/usr/src/app/package-lock.json
       - ./tsconfig.json:/usr/src/app/tsconfig.json
       - ./nest-cli.json:/usr/src/app/nest-cli.json
-      - ./node_modules:/usr/src/app/node_modules
       - ./apps/notifications-service:/usr/src/app/apps/notifications-service
     depends_on:
       - notifications-db
