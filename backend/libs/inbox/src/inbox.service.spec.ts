@@ -77,6 +77,36 @@ describe('InboxService', () => {
     });
   });
 
+  it('storeIfNew returns false on duplicate messageId', async () => {
+    const input = {
+      messageId: 'outbox:1',
+      type: 'notifications.email',
+      payload: { type: 'verify-email', userId: 'user-1', email: 'a@b.co' },
+    };
+    repository.create.mockReturnValue(input);
+    repository.save.mockRejectedValue(
+      new QueryFailedError(
+        'INSERT',
+        [],
+        Object.assign(new Error('duplicate'), { code: '23505' }),
+      ),
+    );
+
+    await expect(service.storeIfNew(input)).resolves.toBe(false);
+  });
+
+  it('storeIfNew returns true when the row is inserted', async () => {
+    const input = {
+      messageId: 'outbox:1',
+      type: 'notifications.email',
+      payload: { type: 'verify-email', userId: 'user-1', email: 'a@b.co' },
+    };
+    repository.create.mockReturnValue(input);
+    repository.save.mockResolvedValue({ id: 1, ...input });
+
+    await expect(service.storeIfNew(input)).resolves.toBe(true);
+  });
+
   it('store rethrows errors that are not unique violations', async () => {
     repository.create.mockReturnValue({});
     repository.save.mockRejectedValue(new Error('db down'));

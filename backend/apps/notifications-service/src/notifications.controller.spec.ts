@@ -20,12 +20,12 @@ describe('NotificationsController', () => {
 
   it('sends mail and stores inbox when messageId is present', async () => {
     const mailer = { send: vi.fn() };
-    const store = vi.fn().mockResolvedValue({ id: 1 });
+    const storeIfNew = vi.fn().mockResolvedValue(true);
     const ack = vi.fn();
     const controller = new NotificationsController(
       mailer as never,
       {
-        store,
+        storeIfNew,
       } as never,
     );
     const dto = {
@@ -41,7 +41,7 @@ describe('NotificationsController', () => {
     } as never);
 
     expect(mailer.send).toHaveBeenCalledWith(dto);
-    expect(store).toHaveBeenCalledWith({
+    expect(storeIfNew).toHaveBeenCalledWith({
       messageId: 'outbox:9',
       type: NOTIFICATIONS_EMAIL_EVENT,
       payload: {
@@ -51,5 +51,50 @@ describe('NotificationsController', () => {
       },
     });
     expect(ack).toHaveBeenCalled();
+  });
+
+  it('acks duplicate messageId without sending mail', async () => {
+    const mailer = { send: vi.fn() };
+    const storeIfNew = vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const ack = vi.fn();
+    const controller = new NotificationsController(
+      mailer as never,
+      {
+        storeIfNew,
+      } as never,
+    );
+    const dto = {
+      type: 'verify-email' as const,
+      userId: '11111111-1111-4111-8111-111111111111',
+      email: 'a@b.co',
+      token: 'secret-token',
+    };
+    const context = {
+      getMessage: () => ({ properties: { messageId: 'outbox:9' } }),
+      getChannelRef: () => ({ ack }),
+    } as never;
+
+    await controller.onEmail(dto, context);
+    await controller.onEmail(dto, context);
+
+    expect(storeIfNew).toHaveBeenCalledTimes(2);
+    expect(storeIfNew).toHaveBeenCalledWith({
+      messageId: 'outbox:9',
+      type: NOTIFICATIONS_EMAIL_EVENT,
+      payload: {
+        type: 'verify-email',
+        userId: dto.userId,
+        email: dto.email,
+      },
+    });
+    expect(JSON.stringify(storeIfNew.mock.calls[0]?.[0])).not.toContain(
+      'secret-token',
+    );
+    expect(mailer.send).toHaveBeenCalledOnce();
+    expect(mailer.send).toHaveBeenCalledWith(dto);
+    expect(ack).toHaveBeenCalledTimes(2);
   });
 });

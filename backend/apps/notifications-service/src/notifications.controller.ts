@@ -35,8 +35,7 @@ export class NotificationsController {
       return;
     }
 
-    this.mailer.send(dto);
-    await this.inbox.store({
+    const inserted = await this.inbox.storeIfNew({
       messageId,
       type: NOTIFICATIONS_EMAIL_EVENT,
       payload: {
@@ -45,6 +44,12 @@ export class NotificationsController {
         email: dto.email,
       },
     });
+    if (!inserted) {
+      channel.ack(originalMessage);
+      return;
+    }
+
+    this.mailer.send(dto);
     channel.ack(originalMessage);
   }
 }

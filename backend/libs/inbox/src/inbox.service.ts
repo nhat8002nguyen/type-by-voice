@@ -43,6 +43,27 @@ export class InboxService {
     }
   }
 
+  async storeIfNew(input: {
+    messageId: string;
+    type: string;
+    payload: Record<string, unknown>;
+  }): Promise<boolean> {
+    try {
+      const row = this.inboxRepository.create({
+        messageId: input.messageId,
+        type: input.type,
+        payload: input.payload,
+      });
+      await this.inboxRepository.save(row);
+      return true;
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   async claimPending(options: {
     take: number;
     maxAttempts: number;
