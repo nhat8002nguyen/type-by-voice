@@ -3,6 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { ClientProxy } from '@nestjs/microservices';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { underlyingClientToken } from '@app/tracing';
 import { Outbox } from './entities/outbox.entity.js';
 import {
   OUTBOX_CLIENT,
@@ -14,6 +15,7 @@ import { OutboxService } from './outbox.service.js';
 
 @Module({})
 export class OutboxModule {
+  /** OutboxModule.register({ target, clientToken }) injects that RMQ client. */
   static register(options: OutboxRegisterOptions): DynamicModule {
     return {
       module: OutboxModule,
@@ -28,7 +30,10 @@ export class OutboxModule {
           provide: OUTBOX_CLIENT,
           inject: [ModuleRef],
           useFactory: (moduleRef: ModuleRef) =>
-            moduleRef.get<ClientProxy>(options.clientToken, { strict: false }),
+            moduleRef.get<ClientProxy>(
+              underlyingClientToken(options.clientToken),
+              { strict: false },
+            ),
         },
         OutboxProcessor,
       ],
@@ -36,5 +41,3 @@ export class OutboxModule {
     };
   }
 }
-
-export type OutboxModuleRegister = typeof OutboxModule.register;

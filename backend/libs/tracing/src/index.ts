@@ -3,6 +3,7 @@ export * from './clients/nats-client.proxy.js';
 export * from './clients/rmq-client.module.js';
 export * from './clients/rmq-client.proxy.js';
 export * from './clients/traced-client.module-factory.js';
+export * from './clients/traced-client.tokens.js';
 export * from './clients/tracing-client-proxy.base.js';
 export * from './clients/tracing-client.types.js';
 export * from './trace-context.service.js';

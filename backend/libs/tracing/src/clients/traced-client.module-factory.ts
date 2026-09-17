@@ -8,6 +8,7 @@ import {
 import { TraceContextService } from '../trace-context.service.js';
 import { TracingModule } from '../tracing.module.js';
 import { ClientRegistration, TracingClientProxy } from './tracing-client.types.js';
+import { underlyingClientToken } from './traced-client.tokens.js';
 
 export interface TracedClientModuleDefinition {
   module: Type<unknown>;
@@ -31,7 +32,7 @@ export function createTracedClientModule({
 }: TracedClientModuleDefinition): DynamicModule {
   const entries = registrations.map((registration) => ({
     registration,
-    clientToken: Symbol(`${String(registration.name)}_CLIENT`),
+    clientToken: underlyingClientToken(registration.name),
   }));
 
   return {
@@ -50,6 +51,9 @@ export function createTracedClientModule({
       inject: [clientToken, TraceContextService, INQUIRER],
       useFactory: createProxy,
     })),
-    exports: entries.map(({ registration }) => registration.name),
+    exports: [
+      ...entries.map(({ registration }) => registration.name),
+      ClientsModule,
+    ],
   };
 }
