@@ -7,11 +7,22 @@ import type { StartMessage } from '@type-by-voice/dictation-v1';
 describe('DictateService', () => {
   it('checks quota before ready and does not send audio on NATS until stop', async () => {
     const quota = {
-      send: vi.fn().mockReturnValue(of({ allowed: true, quota: loadFixture('ready.json').quota })),
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({ allowed: true, quota: loadFixture('ready.json').quota }),
+        ),
     };
     const speech = { send: vi.fn() };
-    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
-    const ready = await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
+    const ready = await service.onText(
+      loadFixture<StartMessage>('start.valid.json'),
+    );
     expect(ready.type).toBe('ready');
     expect(speech.send).not.toHaveBeenCalled();
     await service.onBinary(Buffer.from('OggS'));
@@ -23,51 +34,127 @@ describe('DictateService', () => {
       send: vi.fn((pattern: string) =>
         of(
           pattern === 'quota.check'
-            ? { allowed: true, quota: { unit: 'words', limit: 2000, used: 312, resetAt: '2026-09-18T04:12:00Z' } }
-            : { quota: { unit: 'words', limit: 2000, used: 315, resetAt: '2026-09-18T04:12:00Z' } },
+            ? {
+                allowed: true,
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 312,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              }
+            : {
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 315,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              },
         ),
       ),
     };
     const speech = {
-      send: vi.fn().mockReturnValue(of({ text: 'the transcribed text', provider: 'groq-whisper', providerLatencyMs: 20 })),
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({
+            text: 'the transcribed text',
+            provider: 'groq-whisper',
+            providerLatencyMs: 20,
+          }),
+        ),
     };
-    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
     await service.onText(loadFixture<StartMessage>('start.valid.json'));
     await service.onBinary(Buffer.from('OggS'));
     const final = await service.onText(loadFixture('stop.valid.json'));
-    expect(final).toMatchObject({ type: 'final', text: 'the transcribed text', wordCount: 3 });
+    expect(final).toMatchObject({
+      type: 'final',
+      text: 'the transcribed text',
+      wordCount: 3,
+    });
     expect(speech.send).toHaveBeenCalledOnce();
-    expect(quota.send).toHaveBeenCalledWith('quota.commit', expect.objectContaining({ wordCount: 3 }));
+    expect(quota.send).toHaveBeenCalledWith(
+      'quota.commit',
+      expect.objectContaining({ wordCount: 3 }),
+    );
   });
 
   it('cancel never calls speech or quota commit', async () => {
     const speech = { send: vi.fn() };
     const quota = {
-      send: vi.fn().mockReturnValue(of({ allowed: true, quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' } })),
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({
+            allowed: true,
+            quota: {
+              unit: 'words',
+              limit: 2000,
+              used: 0,
+              resetAt: '2026-09-18T04:12:00Z',
+            },
+          }),
+        ),
     };
-    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
     await service.onText(loadFixture<StartMessage>('start.valid.json'));
     await service.onBinary(Buffer.from('OggS'));
     await service.onText(loadFixture('cancel.valid.json'));
     expect(speech.send).not.toHaveBeenCalled();
-    expect(quota.send).not.toHaveBeenCalledWith('quota.commit', expect.anything());
+    expect(quota.send).not.toHaveBeenCalledWith(
+      'quota.commit',
+      expect.anything(),
+    );
   });
 
   it('provider throw fails transcription as provider_unavailable', async () => {
     const quota = {
-      send: vi.fn().mockReturnValue(
-        of({ allowed: true, quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' } }),
-      ),
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({
+            allowed: true,
+            quota: {
+              unit: 'words',
+              limit: 2000,
+              used: 0,
+              resetAt: '2026-09-18T04:12:00Z',
+            },
+          }),
+        ),
     };
     const speech = {
       send: vi.fn().mockReturnValue(throwError(() => new Error('groq down'))),
     };
-    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
     await service.onText(loadFixture<StartMessage>('start.valid.json'));
     await service.onBinary(Buffer.from('OggS'));
     const error = await service.onText(loadFixture('stop.valid.json'));
-    expect(error).toMatchObject({ type: 'error', code: 'provider_unavailable' });
-    expect(quota.send).not.toHaveBeenCalledWith('quota.commit', expect.anything());
+    expect(error).toMatchObject({
+      type: 'error',
+      code: 'provider_unavailable',
+    });
+    expect(quota.send).not.toHaveBeenCalledWith(
+      'quota.commit',
+      expect.anything(),
+    );
   });
 
   it('quota commit throw fails transcription as internal', async () => {
@@ -77,16 +164,32 @@ describe('DictateService', () => {
           ? throwError(() => new Error('quota down'))
           : of({
               allowed: true,
-              quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' },
+              quota: {
+                unit: 'words',
+                limit: 2000,
+                used: 0,
+                resetAt: '2026-09-18T04:12:00Z',
+              },
             }),
       ),
     };
     const speech = {
-      send: vi.fn().mockReturnValue(
-        of({ text: 'the transcribed text', provider: 'groq-whisper', providerLatencyMs: 20 }),
-      ),
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({
+            text: 'the transcribed text',
+            provider: 'groq-whisper',
+            providerLatencyMs: 20,
+          }),
+        ),
     };
-    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
     await service.onText(loadFixture<StartMessage>('start.valid.json'));
     await service.onBinary(Buffer.from('OggS'));
     const error = await service.onText(loadFixture('stop.valid.json'));
@@ -101,26 +204,180 @@ describe('DictateService', () => {
           pattern === 'quota.check'
             ? {
                 allowed: true,
-                quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' },
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 0,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
               }
-            : { quota: { unit: 'words', limit: 2000, used: 3, resetAt: '2026-09-18T04:12:00Z' } },
+            : {
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 3,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              },
         ),
       ),
     };
     const speech = {
-      send: vi.fn().mockReturnValue(
-        of({ text: 'the transcribed text', provider: 'groq-whisper', providerLatencyMs: 20 }),
-      ),
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({
+            text: 'the transcribed text',
+            provider: 'groq-whisper',
+            providerLatencyMs: 20,
+          }),
+        ),
     };
     const outbox = {
       enqueue: vi.fn().mockRejectedValue(new Error('outbox down')),
     };
-    const service = new DictateService(quota as never, speech as never, outbox as never, jwtUser());
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outbox as never,
+      jwtUser(),
+    );
     await service.onText(loadFixture<StartMessage>('start.valid.json'));
     await service.onBinary(Buffer.from('OggS'));
     const error = await service.onText(loadFixture('stop.valid.json'));
     expect(error).toMatchObject({ type: 'error', code: 'internal' });
     expect(service.takePendingClose()?.reason).toBe('internal');
+  });
+
+  it('enqueues quota-warning when remaining words are under 20% of limit', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === 'quota.check'
+            ? {
+                allowed: true,
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 1590,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              }
+            : {
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 1601,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({
+            text: 'the transcribed text',
+            provider: 'groq-whisper',
+            providerLatencyMs: 20,
+          }),
+        ),
+    };
+    const outbox = outboxStub();
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outbox as never,
+      { ...jwtUser(), email: 'a@b.co' },
+    );
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('stop.valid.json'));
+    expect(outbox.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'notifications.email',
+        payload: expect.objectContaining({
+          type: 'quota-warning',
+          userId: jwtUser().userId,
+          email: 'a@b.co',
+          quota: {
+            unit: 'words',
+            limit: 2000,
+            used: 1601,
+            resetAt: '2026-09-18T04:12:00Z',
+          },
+        }),
+      }),
+    );
+  });
+
+  it('enqueues quota-exhausted when used reaches the limit', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === 'quota.check'
+            ? {
+                allowed: true,
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 1997,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              }
+            : {
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 2000,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi
+        .fn()
+        .mockReturnValue(
+          of({
+            text: 'the transcribed text',
+            provider: 'groq-whisper',
+            providerLatencyMs: 20,
+          }),
+        ),
+    };
+    const outbox = outboxStub();
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outbox as never,
+      { ...jwtUser(), email: 'a@b.co' },
+    );
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('stop.valid.json'));
+    expect(outbox.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'notifications.email',
+        payload: expect.objectContaining({
+          type: 'quota-exhausted',
+          quota: {
+            unit: 'words',
+            limit: 2000,
+            used: 2000,
+            resetAt: '2026-09-18T04:12:00Z',
+          },
+        }),
+      }),
+    );
+    expect(outbox.enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ type: 'quota-warning' }),
+      }),
+    );
   });
 });
 
@@ -136,6 +393,12 @@ function jwtUser() {
 
 function outboxStub() {
   return {
-    enqueue: vi.fn(async (message: { type: string; payload: Record<string, unknown>; target: string | symbol }) => message),
+    enqueue: vi.fn(
+      async (message: {
+        type: string;
+        payload: Record<string, unknown>;
+        target: string | symbol;
+      }) => message,
+    ),
   };
 }

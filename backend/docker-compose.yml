@@ -129,6 +129,11 @@ services:
     command: npm run start:dev -- notifications-service
     environment:
       - NODE_ENV=development
+      - POSTGRES_HOST=notifications-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=notifications
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
@@ -141,7 +146,15 @@ services:
       - ./node_modules:/usr/src/app/node_modules
       - ./apps/notifications-service:/usr/src/app/apps/notifications-service
     depends_on:
+      - notifications-db
       - rabbitmq
+      - redis
+  notifications-db:
+    image: postgres:18-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=notifications
   nats-server:
     image: nats:latest
     ports:

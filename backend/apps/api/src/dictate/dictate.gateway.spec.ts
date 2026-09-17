@@ -45,7 +45,9 @@ describe('DictateGateway connection', () => {
   it('sends a protocol error instead of swallowing handleMessage throws', async () => {
     const { gateway, socket } = createHarness();
     await gateway.handleConnection(socket, authReq());
-    socket.dictateService!.onText = vi.fn().mockRejectedValue(new Error('boom'));
+    socket.dictateService!.onText = vi
+      .fn()
+      .mockRejectedValue(new Error('boom'));
 
     socket.emitMessage(JSON.stringify(loadFixture('start.valid.json')));
     await socket.flush();
@@ -110,7 +112,11 @@ function authReq(): IncomingMessage {
 
 function fromPromise<T>(promise: Promise<T>) {
   return {
-    subscribe(observer: { next: (value: T) => void; complete: () => void; error: (err: unknown) => void }) {
+    subscribe(observer: {
+      next: (value: T) => void;
+      complete: () => void;
+      error: (err: unknown) => void;
+    }) {
       void promise.then(
         (value) => {
           observer.next(value);
@@ -136,7 +142,8 @@ function createHarness(options?: {
   const socket = new FakeSocket();
   const gateway = new DictateGateway(
     {
-      verifyAsync: options?.verifyAsync ?? vi.fn().mockResolvedValue(jwtPayload()),
+      verifyAsync:
+        options?.verifyAsync ?? vi.fn().mockResolvedValue(jwtPayload()),
     } as never,
     {
       send: vi.fn((pattern: string) =>
@@ -148,12 +155,25 @@ function createHarness(options?: {
       ),
     } as never,
     {
-      send: options?.speechSend ?? vi.fn().mockReturnValue(of({ text: '', provider: 'groq-whisper', providerLatencyMs: 0 })),
+      send:
+        options?.speechSend ??
+        vi
+          .fn()
+          .mockReturnValue(
+            of({ text: '', provider: 'groq-whisper', providerLatencyMs: 0 }),
+          ),
     } as never,
     {
       enqueue: vi.fn(async (message: unknown) => message),
     } as never,
     new SessionRegistry(),
+    {
+      getMe: vi.fn().mockResolvedValue({
+        id: jwtPayload().sub,
+        email: 'a@b.co',
+        emailVerifiedAt: null,
+      }),
+    } as never,
   );
   return { gateway, socket };
 }

@@ -30,4 +30,42 @@ describe('OutboxProcessor', () => {
     expect(record.data).toEqual(message.payload);
     expect(record.options?.messageId).toBe('outbox:42');
   });
+
+  it('emits to the client matching message.target', async () => {
+    const workflowsEmit = vi.fn().mockReturnValue(of(undefined));
+    const notificationsEmit = vi.fn().mockReturnValue(of(undefined));
+    const processor = new OutboxProcessor(
+      {} as OutboxService,
+      {
+        emit: workflowsEmit,
+      } as unknown as ClientProxy,
+      'WORKFLOWS_SERVICE',
+      [
+        {
+          target: 'WORKFLOWS_SERVICE',
+          client: { emit: workflowsEmit } as unknown as ClientProxy,
+        },
+        {
+          target: 'NOTIFICATIONS_SERVICE',
+          client: { emit: notificationsEmit } as unknown as ClientProxy,
+        },
+      ],
+    );
+
+    await processor.dispatchWorkflowEvent({
+      id: 3,
+      type: 'notifications.email',
+      target: 'NOTIFICATIONS_SERVICE',
+      payload: { type: 'verify-email', userId: 'user-1', email: 'a@b.co' },
+    } as unknown as Outbox);
+
+    expect(notificationsEmit).toHaveBeenCalledTimes(1);
+    expect(workflowsEmit).not.toHaveBeenCalled();
+    const [pattern, record] = notificationsEmit.mock.calls[0] as [
+      string,
+      { data: unknown; options?: { messageId?: string } },
+    ];
+    expect(pattern).toBe('notifications.email');
+    expect(record.options?.messageId).toBe('outbox:3');
+  });
 });

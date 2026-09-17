@@ -19,6 +19,7 @@ import {
 import type { IncomingMessage } from 'node:http';
 import type { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../auth/auth.service.js';
 import { DictateService } from './dictate.service.js';
 import { SessionRegistry } from './session-registry.js';
 
@@ -63,7 +64,9 @@ type AccessJwtPayload = {
 };
 
 @WebSocketGateway({ path: '/v1/dictate' })
-export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class DictateGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   private readonly logger = new Logger(DictateGateway.name);
   private readonly cache = new IdempotencyCache({ nowMs: () => Date.now() });
 
@@ -73,9 +76,13 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @Inject(SPEECH_SERVICE) private readonly speech: ClientProxy,
     private readonly outbox: OutboxService,
     private readonly registry: SessionRegistry,
+    private readonly authService: AuthService,
   ) {}
 
-  async handleConnection(client: DictateSocket, req: IncomingMessage): Promise<void> {
+  async handleConnection(
+    client: DictateSocket,
+    req: IncomingMessage,
+  ): Promise<void> {
     const untilAuth = this.bindInbound(client);
     try {
       await this.authenticateAndAttach(client, req);
@@ -149,7 +156,12 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
       client.close(closeCodeForAuthError(error));
       return;
     }
-    if (!payload.sub || !payload.sid || !payload.platform || !payload.deviceId) {
+    if (
+      !payload.sub ||
+      !payload.sid ||
+      !payload.platform ||
+      !payload.deviceId
+    ) {
       client.close(closeCodeForAuthError());
       return;
     }
@@ -177,6 +189,13 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return;
     }
 
+    let email: string | undefined;
+    try {
+      email = (await this.authService.getMe(payload.sub)).email;
+    } catch {
+      email = undefined;
+    }
+
     client.dictateService = new DictateService(
       this.quota,
       this.speech,
@@ -187,6 +206,7 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
         platform: payload.platform,
         deviceId: payload.deviceId,
         clientVersion: '',
+        email,
       },
       this.cache,
       this.registry,
@@ -260,7 +280,9 @@ export class DictateGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 }
 
-function bearerToken(header: string | string[] | undefined): string | undefined {
+function bearerToken(
+  header: string | string[] | undefined,
+): string | undefined {
   const value = Array.isArray(header) ? header[0] : header;
   if (typeof value !== 'string' || !value.startsWith('Bearer ')) {
     return undefined;

@@ -14,6 +14,10 @@ import {
   type TranscribeRequestDto,
   type TranscribeResponseDto,
 } from '@app/speech';
+import {
+  NOTIFICATIONS_EMAIL_EVENT,
+  NOTIFICATIONS_SERVICE,
+} from '@app/notifications';
 import { WORKFLOWS_CREATE_EVENT, WORKFLOWS_SERVICE } from '@app/workflows';
 import {
   CLOSE_CODES,
@@ -25,6 +29,7 @@ import {
   type ErrorMessage,
   type Platform,
   type ServerTextMessage,
+  type QuotaSnapshot,
   type SessionOutput,
 } from '@type-by-voice/dictation-v1';
 import { firstValueFrom } from 'rxjs';
@@ -52,6 +57,7 @@ export type DictateUser = {
   platform: Platform;
   deviceId: string;
   clientVersion: string;
+  email?: string;
 };
 
 export type DictateClose = {
@@ -104,7 +110,10 @@ export class DictateService {
       return this.protocolError('invalid_request', requestId);
     }
     if (this.#session?.status === 'stopping') {
-      return this.applyOutputs(this.#session.failTranscription('internal')) ?? this.protocolError('internal', requestId);
+      return (
+        this.applyOutputs(this.#session.failTranscription('internal')) ??
+        this.protocolError('internal', requestId)
+      );
     }
     return this.protocolError('internal', requestId);
   }
@@ -165,7 +174,10 @@ export class DictateService {
   private async startSession(
     data: StartMessageLike,
   ): Promise<ServerTextMessage | undefined> {
-    if (this.#registry && !this.#registry.tryAdd(this.#user.userId, this.sessionKey)) {
+    if (
+      this.#registry &&
+      !this.#registry.tryAdd(this.#user.userId, this.sessionKey)
+    ) {
       return this.protocolError('invalid_request', data.requestId);
     }
 
@@ -197,7 +209,10 @@ export class DictateService {
       return this.protocolError(code, data.requestId);
     }
 
-    if (typeof data.clientVersion === 'string' && data.clientVersion.length > 0) {
+    if (
+      typeof data.clientVersion === 'string' &&
+      data.clientVersion.length > 0
+    ) {
       this.#user.clientVersion = data.clientVersion;
     }
 
@@ -234,7 +249,9 @@ export class DictateService {
     return last;
   }
 
-  private applyOutputs(outputs: SessionOutput[]): ServerTextMessage | undefined {
+  private applyOutputs(
+    outputs: SessionOutput[],
+  ): ServerTextMessage | undefined {
     let last: ServerTextMessage | undefined;
     for (const output of outputs) {
       if (output.kind === 'transcribe') {
@@ -316,6 +333,8 @@ export class DictateService {
         },
       });
 
+      await this.enqueueQuotaEmail(commit.quota);
+
       return this.consume(
         session.completeTranscription({
           text: result.text,
@@ -328,10 +347,34 @@ export class DictateService {
     }
   }
 
-  private protocolError(
-    code: ErrorCode,
-    requestId: string,
-  ): ErrorMessage {
+  private async enqueueQuotaEmail(quota: QuotaSnapshot): Promise<void> {
+    const email = this.#user.email;
+    if (!email) {
+      return;
+    }
+    const remaining = quota.limit - quota.used;
+    let type: 'quota-warning' | 'quota-exhausted' | undefined;
+    if (quota.used >= quota.limit) {
+      type = 'quota-exhausted';
+    } else if (remaining < quota.limit * 0.2) {
+      type = 'quota-warning';
+    }
+    if (!type) {
+      return;
+    }
+    await this.#outbox.enqueue({
+      type: NOTIFICATIONS_EMAIL_EVENT,
+      target: NOTIFICATIONS_SERVICE,
+      payload: {
+        type,
+        userId: this.#user.userId,
+        email,
+        quota,
+      },
+    });
+  }
+
+  private protocolError(code: ErrorCode, requestId: string): ErrorMessage {
     this.#pendingClose = {
       code:
         code === 'quota_exceeded' || code === 'audio_cap_exceeded'

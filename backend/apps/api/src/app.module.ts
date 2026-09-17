@@ -1,3 +1,7 @@
+import { NOTIFICATIONS_SERVICE } from '@app/notifications';
+import { OutboxModule } from '@app/outbox';
+import { WORKFLOWS_SERVICE } from '@app/workflows';
+import { RmqClientModule } from '@app/tracing';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { createObserveModule } from '@nestjs/observe';
@@ -8,6 +12,8 @@ import { DictateModule } from './dictate/dictate.module.js';
 import { HealthModule } from './health/health.module.js';
 import { TranscriptsModule } from './transcripts/transcripts.module.js';
 import { UsersModule } from './users/users.module.js';
+
+const WORKFLOWS_RMQ_CLIENT = Symbol('WORKFLOWS_RMQ_CLIENT');
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -33,6 +39,19 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     UsersModule,
     TranscriptsModule,
     DictateModule,
+    RmqClientModule.register([
+      { name: NOTIFICATIONS_SERVICE, queue: 'notifications-service' },
+      { name: WORKFLOWS_RMQ_CLIENT, queue: 'workflows-service' },
+    ]),
+    OutboxModule.register({
+      targets: [
+        {
+          target: NOTIFICATIONS_SERVICE,
+          clientToken: NOTIFICATIONS_SERVICE,
+        },
+        { target: WORKFLOWS_SERVICE, clientToken: WORKFLOWS_RMQ_CLIENT },
+      ],
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],

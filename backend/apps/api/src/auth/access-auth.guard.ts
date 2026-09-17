@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Platform } from '@type-by-voice/dictation-v1';
 import { Repository } from 'typeorm';
 import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
@@ -17,6 +18,9 @@ export type RequestUser = {
   email: string;
   emailVerifiedAt: Date | null;
   sessionId: string;
+  platform: Platform;
+  deviceId: string;
+  clientVersion: string;
 };
 
 @Injectable()
@@ -74,6 +78,9 @@ export class AccessAuthGuard implements CanActivate {
       email: user.email,
       emailVerifiedAt: user.emailVerifiedAt,
       sessionId: session.id,
+      platform: session.platform,
+      deviceId: session.deviceId,
+      clientVersion: session.clientVersion,
     };
     return true;
   }
