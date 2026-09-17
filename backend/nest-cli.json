@@ -28,6 +28,15 @@
         "tsConfigPath": "libs/inbox/tsconfig.lib.json"
       }
     },
+    "notifications": {
+      "type": "library",
+      "root": "libs/notifications",
+      "entryFile": "index",
+      "sourceRoot": "libs/notifications/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/notifications/tsconfig.lib.json"
+      }
+    },
     "notifications-service": {
       "type": "application",
       "root": "apps/notifications-service",
@@ -46,6 +55,15 @@
         "tsConfigPath": "libs/outbox/tsconfig.lib.json"
       }
     },
+    "quota": {
+      "type": "library",
+      "root": "libs/quota",
+      "entryFile": "index",
+      "sourceRoot": "libs/quota/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/quota/tsconfig.lib.json"
+      }
+    },
     "quota-service": {
       "type": "application",
       "root": "apps/quota-service",
@@ -53,6 +71,15 @@
       "sourceRoot": "apps/quota-service/src",
       "compilerOptions": {
         "tsConfigPath": "apps/quota-service/tsconfig.app.json"
+      }
+    },
+    "speech": {
+      "type": "library",
+      "root": "libs/speech",
+      "entryFile": "index",
+      "sourceRoot": "libs/speech/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/speech/tsconfig.lib.json"
       }
     },
     "speech-service": {
@@ -71,6 +98,15 @@
       "sourceRoot": "libs/tracing/src",
       "compilerOptions": {
         "tsConfigPath": "libs/tracing/tsconfig.lib.json"
+      }
+    },
+    "workflows": {
+      "type": "library",
+      "root": "libs/workflows",
+      "entryFile": "index",
+      "sourceRoot": "libs/workflows/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/workflows/tsconfig.lib.json"
       }
     },
     "workflows-service": {

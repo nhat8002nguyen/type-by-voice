@@ -35,6 +35,7 @@
     "@nestjs/schedule": "^12.0.2",
     "@nestjs/terminus": "^12.0.0",
     "@nestjs/typeorm": "^12.0.1",
+    "@type-by-voice/dictation-v1": "file:../contracts/dictation-v1",
     "amqp-connection-manager": "^5.0.0",
     "amqplib": "^2.0.1",
     "bullmq": "^6.3.6",

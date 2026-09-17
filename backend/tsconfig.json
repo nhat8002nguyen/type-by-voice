@@ -25,17 +25,41 @@
       "@app/inbox/*": [
         "./libs/inbox/src/*"
       ],
+      "@app/notifications": [
+        "./libs/notifications/src/index.ts"
+      ],
+      "@app/notifications/*": [
+        "./libs/notifications/src/*"
+      ],
       "@app/outbox": [
         "./libs/outbox/src/index.ts"
       ],
       "@app/outbox/*": [
         "./libs/outbox/src/*"
       ],
+      "@app/quota": [
+        "./libs/quota/src/index.ts"
+      ],
+      "@app/quota/*": [
+        "./libs/quota/src/*"
+      ],
+      "@app/speech": [
+        "./libs/speech/src/index.ts"
+      ],
+      "@app/speech/*": [
+        "./libs/speech/src/*"
+      ],
       "@app/tracing": [
         "./libs/tracing/src/index.ts"
       ],
       "@app/tracing/*": [
         "./libs/tracing/src/*"
+      ],
+      "@app/workflows": [
+        "./libs/workflows/src/index.ts"
+      ],
+      "@app/workflows/*": [
+        "./libs/workflows/src/*"
       ]
     },
     "types": [
@@ -64,10 +88,22 @@
       "path": "./libs/inbox/tsconfig.lib.json"
     },
     {
+      "path": "./libs/notifications/tsconfig.lib.json"
+    },
+    {
       "path": "./libs/outbox/tsconfig.lib.json"
     },
     {
+      "path": "./libs/quota/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/speech/tsconfig.lib.json"
+    },
+    {
       "path": "./libs/tracing/tsconfig.lib.json"
+    },
+    {
+      "path": "./libs/workflows/tsconfig.lib.json"
     }
   ]
 }
