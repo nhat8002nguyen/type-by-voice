@@ -9,6 +9,11 @@ import { AuthService } from './auth.service.js';
 import { AuthToken } from './entities/auth-token.entity.js';
 import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
+import {
+  REDIS_CLIENT,
+  RateLimitGuard,
+  createRedisClient,
+} from '../rate-limit/rate-limit.guard.js';
 
 @Module({
   imports: [
@@ -20,7 +25,18 @@ import { User } from './entities/user.entity.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AccessAuthGuard],
-  exports: [AuthService, JwtModule, AccessAuthGuard, TypeOrmModule],
+  providers: [
+    AuthService,
+    AccessAuthGuard,
+    RateLimitGuard,
+    { provide: REDIS_CLIENT, useFactory: createRedisClient },
+  ],
+  exports: [
+    AuthService,
+    JwtModule,
+    AccessAuthGuard,
+    TypeOrmModule,
+    RateLimitGuard,
+  ],
 })
 export class AuthModule {}

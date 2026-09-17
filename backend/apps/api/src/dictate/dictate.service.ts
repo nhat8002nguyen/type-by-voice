@@ -33,7 +33,8 @@ import {
   type SessionOutput,
 } from '@type-by-voice/dictation-v1';
 import { firstValueFrom } from 'rxjs';
-import type { SessionRegistry } from './session-registry.js';
+import { SessionRegistry } from './session-registry.js';
+import { DictateMetrics } from '../metrics/dictate-metrics.js';
 
 const BYTES_PER_MS = 3;
 const COST_MICROS_PER_HOUR = 40_000;
@@ -77,8 +78,12 @@ export class DictateService {
   readonly #user: DictateUser;
   readonly #cache: IdempotencyCache;
   readonly #registry: SessionRegistry | undefined;
+  readonly #metrics: DictateMetrics | undefined;
+  readonly #startedAtMs = Date.now();
   #session: DictationSession | undefined;
   #pendingClose: DictateClose | undefined;
+  #audioReceivedAtMs: number | undefined;
+  #providerMs = 0;
 
   constructor(
     quota: QuotaClient,
@@ -87,6 +92,7 @@ export class DictateService {
     user: DictateUser,
     cache: IdempotencyCache = new IdempotencyCache({ nowMs: () => Date.now() }),
     registry?: SessionRegistry,
+    metrics?: DictateMetrics,
   ) {
     this.#quota = quota;
     this.#speech = speech;
@@ -94,10 +100,27 @@ export class DictateService {
     this.#user = user;
     this.#cache = cache;
     this.#registry = registry;
+    this.#metrics = metrics;
   }
 
   get userId(): string {
     return this.#user.userId;
+  }
+
+  get platform(): Platform {
+    return this.#user.platform;
+  }
+
+  get deviceId(): string {
+    return this.#user.deviceId;
+  }
+
+  get audioReceivedMs(): number {
+    return (this.#audioReceivedAtMs ?? this.#startedAtMs) - this.#startedAtMs;
+  }
+
+  get providerMs(): number {
+    return this.#providerMs;
   }
 
   get isBusy(): boolean {
@@ -156,6 +179,7 @@ export class DictateService {
     if (this.#session === undefined) {
       return undefined;
     }
+    this.#audioReceivedAtMs = Date.now();
     return this.consume(
       this.#session.handle({
         kind: 'binary',
@@ -202,6 +226,7 @@ export class DictateService {
 
     if (!check.allowed) {
       this.#registry?.remove(this.#user.userId, this.sessionKey);
+      this.#metrics?.recordQuotaRejected();
       const code: ErrorCode =
         check.reason === 'audio_cap_exceeded'
           ? 'audio_cap_exceeded'
@@ -286,6 +311,7 @@ export class DictateService {
     }
     const audioMs = Math.round(output.audio.byteLength / BYTES_PER_MS);
     let result: TranscribeResponseDto;
+    const providerStartedAt = Date.now();
     try {
       result = await firstValueFrom(
         this.#speech.send<TranscribeResponseDto, TranscribeRequestDto>(
@@ -297,7 +323,10 @@ export class DictateService {
           },
         ),
       );
+      this.#providerMs = Date.now() - providerStartedAt;
     } catch {
+      this.#providerMs = Date.now() - providerStartedAt;
+      this.#metrics?.recordProviderError();
       return this.consume(session.failTranscription('provider_unavailable'));
     }
 

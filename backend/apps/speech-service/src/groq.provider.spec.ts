@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  FakeSpeechProvider,
   GroqSpeechProvider,
   ProviderUnavailableError,
 } from './groq.provider.js';
@@ -34,6 +35,15 @@ describe('GroqSpeechProvider', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe(
       'Bearer gsk_test',
     );
+  });
+
+  it('fake provider returns the transcribed text without Groq', async () => {
+    const provider = new FakeSpeechProvider();
+    const result = await provider.transcribe(Buffer.from('OggS'), {
+      language: 'en',
+    });
+    expect(result.text).toBe('the transcribed text');
+    expect(provider.name).toBe('fake');
   });
 
   it('maps 5xx to ProviderUnavailableError', async () => {

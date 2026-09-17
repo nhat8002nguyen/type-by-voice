@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -30,6 +31,7 @@ import {
 } from './entities/auth-token.entity.js';
 import { Session } from './entities/session.entity.js';
 import { User } from './entities/user.entity.js';
+import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 
 export type AuthTokens = {
   accessToken: string;
@@ -74,6 +76,7 @@ export class AuthService {
     private readonly tokens: Repository<AuthToken>,
     private readonly jwtService: JwtService,
     private readonly outbox: OutboxService,
+    @Optional() private readonly rateLimit?: RateLimitGuard,
   ) {}
 
   async register(dto: RegisterDto, userAgent?: string): Promise<AuthTokens> {
@@ -113,22 +116,38 @@ export class AuthService {
     return this.issueTokens(user, dto, { userAgent });
   }
 
-  async login(dto: LoginDto, userAgent?: string): Promise<AuthTokens> {
+  async login(
+    dto: LoginDto,
+    userAgent?: string,
+    ip?: string,
+  ): Promise<AuthTokens> {
     assertClientIdentity(dto);
-    const user = await this.users.findOneBy({ email: dto.email });
-    if (!user) {
-      throw new UnauthorizedException();
-    }
+    try {
+      const user = await this.users.findOneBy({ email: dto.email });
+      if (!user) {
+        throw new UnauthorizedException();
+      }
 
-    const passwordMatches = await argon2.verify(
-      user.passwordHash,
-      dto.password,
-    );
-    if (!passwordMatches) {
-      throw new UnauthorizedException();
-    }
+      const passwordMatches = await argon2.verify(
+        user.passwordHash,
+        dto.password,
+      );
+      if (!passwordMatches) {
+        throw new UnauthorizedException();
+      }
 
-    return this.issueTokens(user, dto, { rotate: true, userAgent });
+      const tokens = await this.issueTokens(user, dto, {
+        rotate: true,
+        userAgent,
+      });
+      await this.rateLimit?.recordSuccess(dto.email);
+      return tokens;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        await this.rateLimit?.recordFailure(dto.email, ip ?? '');
+      }
+      throw error;
+    }
   }
 
   async refresh(

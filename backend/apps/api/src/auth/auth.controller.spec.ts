@@ -6,6 +6,7 @@ import { createAppValidationPipe } from '../create-app-validation-pipe.js';
 import { AccessAuthGuard } from './access-auth.guard.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 
 const validBody = {
   email: 'a@b.co',
@@ -34,6 +35,7 @@ describe('Auth HTTP identity', () => {
             refresh: vi.fn(),
           },
         },
+        RateLimitGuard,
       ],
     })
       .overrideGuard(AccessAuthGuard)

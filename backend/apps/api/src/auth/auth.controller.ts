@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
@@ -19,9 +20,11 @@ import { RegisterDto } from './dto/register.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 import { InvalidIdentityFilter } from './invalid-identity.filter.js';
+import { RateLimitGuard, clientIp } from '../rate-limit/rate-limit.guard.js';
 
 @Controller('v1/auth')
 @UseFilters(InvalidIdentityFilter)
+@UseGuards(RateLimitGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -35,8 +38,12 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto, @Headers('user-agent') userAgent?: string) {
-    return this.authService.login(dto, userAgent);
+  login(
+    @Body() dto: LoginDto,
+    @Req() req: { ip?: string; socket?: { remoteAddress?: string } },
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.authService.login(dto, userAgent, clientIp(req));
   }
 
   @Post('refresh')

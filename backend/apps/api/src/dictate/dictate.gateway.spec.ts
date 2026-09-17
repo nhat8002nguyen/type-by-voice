@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   closeCodeForAuthError,
   closeCodeForQuota,
+  closeCodeForRateLimit,
   DictateGateway,
 } from './dictate.gateway.js';
 import { SessionRegistry } from './session-registry.js';
@@ -18,6 +19,11 @@ describe('DictateGateway close codes', () => {
   it('maps quota exceeded to 4403', () => {
     expect(closeCodeForQuota()).toBe(CLOSE_CODES.quota_exceeded);
     expect(closeCodeForQuota()).toBe(4403);
+  });
+
+  it('maps rate limited to 4429', () => {
+    expect(closeCodeForRateLimit()).toBe(CLOSE_CODES.rate_limited);
+    expect(closeCodeForRateLimit()).toBe(4429);
   });
 });
 
@@ -54,6 +60,14 @@ describe('DictateGateway connection', () => {
 
     expect(socket.sent[0]).toMatchObject({ type: 'error', code: 'internal' });
     expect(socket.closeCalls.length).toBeGreaterThan(0);
+  });
+
+  it('closes 4429 when dictate upgrade is over limit', async () => {
+    const { gateway, socket } = createHarness({
+      limiter: { allowDictateUpgrade: () => false },
+    });
+    await gateway.handleConnection(socket, authReq());
+    expect(socket.closeCalls[0]?.code).toBe(4429);
   });
 
   it('does not idle-close while stop is awaiting transcribe', async () => {
@@ -132,6 +146,7 @@ function fromPromise<T>(promise: Promise<T>) {
 function createHarness(options?: {
   verifyAsync?: ReturnType<typeof vi.fn>;
   speechSend?: ReturnType<typeof vi.fn>;
+  limiter?: { allowDictateUpgrade: (ip: string) => boolean };
 }) {
   const quotaSnapshot = {
     unit: 'words' as const,
@@ -174,6 +189,8 @@ function createHarness(options?: {
         emailVerifiedAt: null,
       }),
     } as never,
+    undefined,
+    options?.limiter as never,
   );
   return { gateway, socket };
 }

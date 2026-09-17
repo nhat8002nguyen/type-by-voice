@@ -1,4 +1,4 @@
-import { Inject, Logger } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   OnGatewayConnection,
@@ -9,6 +9,7 @@ import { OutboxService } from '@app/outbox';
 import { QUOTA_CHECK_PATTERN, QUOTA_SERVICE } from '@app/quota';
 import type { CheckQuotaRequestDto, CheckQuotaResponseDto } from '@app/quota';
 import { SPEECH_SERVICE } from '@app/speech';
+import { TraceContextService } from '@app/tracing';
 import {
   CLOSE_CODES,
   IdempotencyCache,
@@ -20,6 +21,8 @@ import type { IncomingMessage } from 'node:http';
 import type { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth/auth.service.js';
+import { DictateMetrics } from '../metrics/dictate-metrics.js';
+import { AuthLimiter, clientIp } from '../rate-limit/rate-limit.guard.js';
 import { DictateService } from './dictate.service.js';
 import { SessionRegistry } from './session-registry.js';
 
@@ -31,6 +34,10 @@ export function closeCodeForAuthError(_error?: unknown): number {
 
 export function closeCodeForQuota(_reason?: string): number {
   return CLOSE_CODES.quota_exceeded;
+}
+
+export function closeCodeForRateLimit(): number {
+  return CLOSE_CODES.rate_limited;
 }
 
 export function isUtf8Json(data: Buffer): boolean {
@@ -54,13 +61,8 @@ type DictateSocket = {
   dictateTimer?: ReturnType<typeof setInterval>;
   lastActivityMs?: number;
   messageChain?: Promise<void>;
-};
-
-type AccessJwtPayload = {
-  sub?: string;
-  sid?: string;
-  platform?: Platform;
-  deviceId?: string;
+  connectedAtMs?: number;
+  connectMs?: number;
 };
 
 @WebSocketGateway({ path: '/v1/dictate' })
@@ -69,6 +71,8 @@ export class DictateGateway
 {
   private readonly logger = new Logger(DictateGateway.name);
   private readonly cache = new IdempotencyCache({ nowMs: () => Date.now() });
+  private readonly metrics: DictateMetrics;
+  private readonly limiter: Pick<AuthLimiter, 'allowDictateUpgrade'>;
 
   constructor(
     private readonly jwtService: JwtService,
@@ -77,18 +81,31 @@ export class DictateGateway
     private readonly outbox: OutboxService,
     private readonly registry: SessionRegistry,
     private readonly authService: AuthService,
-  ) {}
+    @Optional() metrics?: DictateMetrics,
+    @Optional() limiter?: AuthLimiter,
+    @Optional() private readonly traceContext?: TraceContextService,
+  ) {
+    this.metrics = metrics ?? new DictateMetrics();
+    this.limiter = limiter ?? new AuthLimiter();
+  }
 
   async handleConnection(
     client: DictateSocket,
     req: IncomingMessage,
   ): Promise<void> {
-    const untilAuth = this.bindInbound(client);
-    try {
-      await this.authenticateAndAttach(client, req);
-    } finally {
-      untilAuth.release();
+    const run = async (): Promise<void> => {
+      const untilAuth = this.bindInbound(client);
+      try {
+        await this.authenticateAndAttach(client, req);
+      } finally {
+        untilAuth.release();
+      }
+    };
+    if (this.traceContext) {
+      await this.traceContext.runWithNewTrace(() => run());
+      return;
     }
+    await run();
   }
 
   handleDisconnect(client: DictateSocket): void {
@@ -131,7 +148,9 @@ export class DictateGateway
       client.lastActivityMs = Date.now();
       client.messageChain = (client.messageChain ?? Promise.resolve())
         .then(() => untilAuth)
-        .then(() => this.handleMessage(client, data))
+        .then(() =>
+          this.runTraced(data, () => this.handleMessage(client, data)),
+        )
         .catch((error) => {
           this.handleProcessingError(client, error);
         });
@@ -143,6 +162,12 @@ export class DictateGateway
     client: DictateSocket,
     req: IncomingMessage,
   ): Promise<void> {
+    client.connectedAtMs = Date.now();
+    if (!this.limiter.allowDictateUpgrade(clientIp(req))) {
+      client.close(closeCodeForRateLimit());
+      return;
+    }
+
     const token = bearerToken(req.headers.authorization);
     if (!token) {
       client.close(closeCodeForAuthError());
@@ -185,6 +210,7 @@ export class DictateGateway
       return;
     }
     if (!check.allowed) {
+      this.metrics.recordQuotaRejected();
       client.close(closeCodeForQuota(check.reason));
       return;
     }
@@ -196,6 +222,7 @@ export class DictateGateway
       email = undefined;
     }
 
+    client.connectMs = Date.now() - (client.connectedAtMs ?? Date.now());
     client.dictateService = new DictateService(
       this.quota,
       this.speech,
@@ -210,6 +237,7 @@ export class DictateGateway
       },
       this.cache,
       this.registry,
+      this.metrics,
     );
     client.dictateTimer = setInterval(() => {
       client.messageChain = (client.messageChain ?? Promise.resolve())
@@ -218,6 +246,21 @@ export class DictateGateway
           this.handleProcessingError(client, error);
         });
     }, TICK_MS);
+  }
+
+  private runTraced<T>(data: SocketData, fn: () => Promise<T>): Promise<T> {
+    if (!this.traceContext) {
+      return fn();
+    }
+    const requestId = peekRequestId(data);
+    if (requestId) {
+      return Promise.resolve(this.traceContext.run(requestId, () => fn()));
+    }
+    const existing = this.traceContext.getTraceId();
+    if (existing) {
+      return Promise.resolve(this.traceContext.run(existing, () => fn()));
+    }
+    return Promise.resolve(this.traceContext.runWithNewTrace(() => fn()));
   }
 
   private async pumpTick(client: DictateSocket): Promise<void> {
@@ -263,7 +306,23 @@ export class DictateGateway
     if (message) {
       client.send(JSON.stringify(message));
       if (message.type === 'final' || message.type === 'error') {
-        this.logger.log(`requestId=${message.requestId} type=${message.type}`);
+        this.logger.log(
+          JSON.stringify({
+            requestId: message.requestId,
+            platform: service.platform,
+            deviceId: service.deviceId,
+            type: message.type,
+          }),
+        );
+        if (message.type === 'final') {
+          this.metrics.record({
+            platform: service.platform,
+            connectMs: client.connectMs ?? 0,
+            audioReceivedMs: service.audioReceivedMs,
+            providerMs: service.providerMs,
+            totalMs: Date.now() - (client.connectedAtMs ?? Date.now()),
+          });
+        }
       }
     }
     const close = service.takePendingClose();
@@ -279,6 +338,13 @@ export class DictateGateway
     }
   }
 }
+
+type AccessJwtPayload = {
+  sub?: string;
+  sid?: string;
+  platform?: Platform;
+  deviceId?: string;
+};
 
 function bearerToken(
   header: string | string[] | undefined,
@@ -299,4 +365,19 @@ function toBuffer(data: SocketData): Buffer {
     return Buffer.concat(data);
   }
   return Buffer.from(data);
+}
+
+function peekRequestId(data: SocketData): string | undefined {
+  try {
+    const buffer = toBuffer(data);
+    if (!isUtf8Json(buffer)) {
+      return undefined;
+    }
+    const parsed = JSON.parse(buffer.toString('utf8')) as {
+      requestId?: unknown;
+    };
+    return typeof parsed.requestId === 'string' ? parsed.requestId : undefined;
+  } catch {
+    return undefined;
+  }
 }

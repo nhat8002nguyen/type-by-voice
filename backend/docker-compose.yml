@@ -81,6 +81,8 @@ services:
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
+      - SPEECH_PROVIDER=fake
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     volumes:
       - ./libs:/usr/src/app/libs
       - ./package.json:/usr/src/app/package.json
@@ -118,6 +120,7 @@ services:
       - workflows-db
       - rabbitmq
       - redis
+      - nats-server
   workflows-db:
     image: postgres:18-alpine
     environment:

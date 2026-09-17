@@ -1,6 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import type { SpeechProvider } from '@app/speech';
 
+export class FakeSpeechProvider implements SpeechProvider {
+  readonly name = 'fake';
+
+  async transcribe(
+    _audio: Buffer,
+    _opts: { language: string },
+  ): Promise<{ text: string; providerLatencyMs: number }> {
+    return { text: 'the transcribed text', providerLatencyMs: 0 };
+  }
+}
+
 const GROQ_TRANSCRIPTIONS_URL =
   'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3-turbo';
