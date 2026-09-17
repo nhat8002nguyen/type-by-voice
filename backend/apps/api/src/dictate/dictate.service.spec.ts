@@ -1,0 +1,88 @@
+import { describe, expect, it, vi } from 'vitest';
+import { of, throwError } from 'rxjs';
+import { loadFixture } from '@type-by-voice/dictation-v1';
+import { DictateService } from './dictate.service.js';
+import type { StartMessage } from '@type-by-voice/dictation-v1';
+
+describe('DictateService', () => {
+  it('checks quota before ready and does not send audio on NATS until stop', async () => {
+    const quota = {
+      send: vi.fn().mockReturnValue(of({ allowed: true, quota: loadFixture('ready.json').quota })),
+    };
+    const speech = { send: vi.fn() };
+    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    const ready = await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    expect(ready.type).toBe('ready');
+    expect(speech.send).not.toHaveBeenCalled();
+    await service.onBinary(Buffer.from('OggS'));
+    expect(speech.send).not.toHaveBeenCalled();
+  });
+
+  it('on stop sends one transcribe RPC then commits quota', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === 'quota.check'
+            ? { allowed: true, quota: { unit: 'words', limit: 2000, used: 312, resetAt: '2026-09-18T04:12:00Z' } }
+            : { quota: { unit: 'words', limit: 2000, used: 315, resetAt: '2026-09-18T04:12:00Z' } },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(of({ text: 'the transcribed text', provider: 'groq-whisper', providerLatencyMs: 20 })),
+    };
+    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    const final = await service.onText(loadFixture('stop.valid.json'));
+    expect(final).toMatchObject({ type: 'final', text: 'the transcribed text', wordCount: 3 });
+    expect(speech.send).toHaveBeenCalledOnce();
+    expect(quota.send).toHaveBeenCalledWith('quota.commit', expect.objectContaining({ wordCount: 3 }));
+  });
+
+  it('cancel never calls speech or quota commit', async () => {
+    const speech = { send: vi.fn() };
+    const quota = {
+      send: vi.fn().mockReturnValue(of({ allowed: true, quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' } })),
+    };
+    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('cancel.valid.json'));
+    expect(speech.send).not.toHaveBeenCalled();
+    expect(quota.send).not.toHaveBeenCalledWith('quota.commit', expect.anything());
+  });
+
+  it('provider throw fails transcription as provider_unavailable', async () => {
+    const quota = {
+      send: vi.fn().mockReturnValue(
+        of({ allowed: true, quota: { unit: 'words', limit: 2000, used: 0, resetAt: '2026-09-18T04:12:00Z' } }),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(throwError(() => new Error('groq down'))),
+    };
+    const service = new DictateService(quota as never, speech as never, outboxStub(), jwtUser());
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    const error = await service.onText(loadFixture('stop.valid.json'));
+    expect(error).toMatchObject({ type: 'error', code: 'provider_unavailable' });
+    expect(quota.send).not.toHaveBeenCalledWith('quota.commit', expect.anything());
+  });
+});
+
+function jwtUser() {
+  return {
+    userId: '11111111-1111-4111-8111-111111111111',
+    sessionId: '22222222-2222-4222-8222-222222222222',
+    platform: 'macos' as const,
+    deviceId: '9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77',
+    clientVersion: '1.0.0+12',
+  };
+}
+
+function outboxStub() {
+  return {
+    enqueue: vi.fn(async (message: { type: string; payload: Record<string, unknown>; target: string | symbol }) => message),
+  };
+}
