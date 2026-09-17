@@ -38,6 +38,14 @@ export class OutboxService {
   }
 
   async markAsProcessed(id: number): Promise<void> {
-    await this.outboxRepository.update(id, { status: 'processed' });
+    const row = await this.outboxRepository.findOneBy({ id });
+    if (!row) {
+      return;
+    }
+    const payload = { ...row.payload };
+    if ('text' in payload) {
+      delete payload.text;
+    }
+    await this.outboxRepository.update(id, { status: 'processed', payload });
   }
 }

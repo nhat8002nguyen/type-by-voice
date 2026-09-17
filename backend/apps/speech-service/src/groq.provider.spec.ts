@@ -68,6 +68,18 @@ describe('GroqSpeechProvider', () => {
     expect(provider).toBeInstanceOf(GroqSpeechProvider);
   });
 
+  it('throws when SPEECH_PROVIDER is groq and GROQ_API_KEY is missing', () => {
+    expect(() =>
+      createSpeechProvider({ SPEECH_PROVIDER: 'groq' }),
+    ).toThrow(/GROQ_API_KEY/);
+  });
+
+  it('throws in production when GROQ_API_KEY is missing', () => {
+    expect(() =>
+      createSpeechProvider({ NODE_ENV: 'production' }),
+    ).toThrow(/GROQ_API_KEY/);
+  });
+
   it('maps 5xx to ProviderUnavailableError', async () => {
     const provider = new GroqSpeechProvider({
       apiKey: 'gsk_test',

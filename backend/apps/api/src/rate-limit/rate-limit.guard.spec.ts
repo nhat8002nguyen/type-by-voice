@@ -46,7 +46,7 @@ describe('RateLimitGuard Redis keys', () => {
     expect(redis.ttls.get('lock:email:a@b.co')).toBe(60);
   });
 
-  it('expires rl:ip and rl:email only when the key is first created', async () => {
+  it('expires rl:ip and rl:email with NX so the window stays fixed from first hit', async () => {
     const redis = memoryRedis();
     const guard = new RateLimitGuard(redis.client);
     await expect(
@@ -54,8 +54,6 @@ describe('RateLimitGuard Redis keys', () => {
     ).resolves.toBe(true);
     expect(redis.ttls.get('rl:ip:1.1.1.1')).toBe(60);
     expect(redis.ttls.get('rl:email:a@b.co')).toBe(60);
-    expect(redis.expireCalls.get('rl:ip:1.1.1.1')).toBe(1);
-    expect(redis.expireCalls.get('rl:email:a@b.co')).toBe(1);
 
     redis.ttls.set('rl:ip:1.1.1.1', 40);
     redis.ttls.set('rl:email:a@b.co', 40);
@@ -67,8 +65,18 @@ describe('RateLimitGuard Redis keys', () => {
     expect(redis.values.get('rl:email:a@b.co')).toBe('2');
     expect(redis.ttls.get('rl:ip:1.1.1.1')).toBe(40);
     expect(redis.ttls.get('rl:email:a@b.co')).toBe(40);
-    expect(redis.expireCalls.get('rl:ip:1.1.1.1')).toBe(1);
-    expect(redis.expireCalls.get('rl:email:a@b.co')).toBe(1);
+  });
+
+  it('backfills EXPIRE on rl:ip when INCR left an immortal counter', async () => {
+    const redis = memoryRedis();
+    const guard = new RateLimitGuard(redis.client);
+    await redis.client.incr('rl:ip:1.1.1.1');
+    expect(redis.ttls.has('rl:ip:1.1.1.1')).toBe(false);
+    await expect(
+      guard.canActivate(loginContext('a@b.co', '1.1.1.1')),
+    ).resolves.toBe(true);
+    expect(redis.values.get('rl:ip:1.1.1.1')).toBe('2');
+    expect(redis.ttls.get('rl:ip:1.1.1.1')).toBe(60);
   });
 
   it('keeps n across the 32s lock so the next failure uses 60s backoff', async () => {
@@ -110,7 +118,11 @@ function memoryRedis() {
       values.set(key, String(next));
       return next;
     },
-    expire: async (key: string, seconds: number) => {
+    expire: async (key: string, seconds: number, mode?: string) => {
+      if (mode === 'NX' && ttls.has(key)) {
+        expireCalls.set(key, (expireCalls.get(key) ?? 0) + 1);
+        return 0;
+      }
       ttls.set(key, seconds);
       expireCalls.set(key, (expireCalls.get(key) ?? 0) + 1);
       return 1;

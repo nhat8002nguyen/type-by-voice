@@ -1,14 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { of } from 'rxjs';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QUOTA_SERVICE } from '../../../../libs/quota/src/tokens.js';
 import { AccessAuthGuard } from '../auth/access-auth.guard.js';
-import { Session } from '../auth/entities/session.entity.js';
-import { User } from '../auth/entities/user.entity.js';
+import { AuthService } from '../auth/auth.service.js';
 import { MeQuotaController } from './quota.controller.js';
 
 function sendProxy(send: ReturnType<typeof vi.fn>) {
@@ -93,8 +91,7 @@ describe('MeQuota HTTP access guard', () => {
         AccessAuthGuard,
         { provide: QUOTA_SERVICE, useValue: { send: vi.fn() } },
         { provide: JwtService, useValue: new JwtService({ secret: 'test' }) },
-        { provide: getRepositoryToken(Session), useValue: {} },
-        { provide: getRepositoryToken(User), useValue: {} },
+        { provide: AuthService, useValue: {} },
       ],
     }).compile();
 

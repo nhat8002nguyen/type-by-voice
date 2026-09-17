@@ -24,9 +24,11 @@ describe('TranscriptsService', () => {
       audioMs: 11800,
     });
     const hits = await service.search('user-1', 'transcribed');
-    expect(hits).toHaveLength(1);
-    expect(hits[0].text).toBe('the transcribed text');
-    expect(await service.search('user-2', 'transcribed')).toHaveLength(0);
+    expect(hits.items).toHaveLength(1);
+    expect(hits.items[0].text).toBe('the transcribed text');
+    expect((await service.search('user-2', 'transcribed')).items).toHaveLength(
+      0,
+    );
   });
 
   it('create is idempotent on requestId', async () => {
@@ -39,20 +41,26 @@ describe('TranscriptsService', () => {
     });
     expect(second.id).toBe(first.id);
     expect(second.text).toBe('the transcribed text');
-    expect(await service.search('user-1', 'transcribed')).toHaveLength(1);
+    expect((await service.search('user-1', 'transcribed')).items).toHaveLength(
+      1,
+    );
   });
 
   it('search matches case-insensitively', async () => {
     const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
     await service.create(body);
-    expect(await service.search('user-1', 'TRANSCRIBED')).toHaveLength(1);
+    expect(await service.search('user-1', 'TRANSCRIBED')).toMatchObject({
+      items: [expect.objectContaining({ text: 'the transcribed text' })],
+    });
   });
 
   it('soft-deletes so search, get, and export omit the row', async () => {
     const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
     const created = await service.create(body);
     await service.delete('user-1', created.id);
-    expect(await service.search('user-1', 'transcribed')).toHaveLength(0);
+    expect((await service.search('user-1', 'transcribed')).items).toHaveLength(
+      0,
+    );
     expect(await service.get('user-1', created.id)).toBeNull();
     expect(await service.export('user-1')).toHaveLength(0);
   });
@@ -100,6 +108,27 @@ describe('TranscriptsService', () => {
     expect(new Set(ids).size).toBe(2);
   });
 
+  it('pages search after decrypt and filter', async () => {
+    const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
+    await service.create(body);
+    await service.create({
+      ...body,
+      requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee2',
+      text: 'the transcribed note',
+      wordCount: 3,
+    });
+    const page = await service.search('user-1', 'transcribed', { limit: 1 });
+    expect(page.items).toHaveLength(1);
+    expect(page.nextCursor).toBeDefined();
+    const next = await service.search('user-1', 'transcribed', {
+      cursor: page.nextCursor,
+      limit: 1,
+    });
+    expect(next.items).toHaveLength(1);
+    expect(next.items[0].id).not.toBe(page.items[0].id);
+    expect(next.nextCursor).toBeUndefined();
+  });
+
   it('gets a decrypted transcript for the owner only', async () => {
     const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
     const created = await service.create(body);
@@ -115,8 +144,8 @@ describe('TranscriptsService', () => {
     const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
     await service.handleInboxCreate(body);
     const hits = await service.search('user-1', 'transcribed');
-    expect(hits).toHaveLength(1);
-    expect(hits[0].text).toBe('the transcribed text');
+    expect(hits.items).toHaveLength(1);
+    expect(hits.items[0].text).toBe('the transcribed text');
   });
 
   it('create persists ciphertext through a TypeORM repository', async () => {
@@ -134,7 +163,9 @@ describe('TranscriptsService', () => {
     expect(decryptTranscript(rows[0].ciphertext, Buffer.alloc(32, 7))).toBe(
       'the transcribed text',
     );
-    expect(await service.search('user-1', 'transcribed')).toHaveLength(1);
+    expect((await service.search('user-1', 'transcribed')).items).toHaveLength(
+      1,
+    );
   });
 
   it('handleInboxCreate writes through the provided EntityManager', async () => {
@@ -159,7 +190,9 @@ describe('TranscriptsService', () => {
       wordCount: body.wordCount,
       audioMs: body.audioMs,
     });
-    expect(await service.search('user-1', 'transcribed')).toHaveLength(1);
+    expect((await service.search('user-1', 'transcribed')).items).toHaveLength(
+      1,
+    );
   });
 });
 

@@ -12,6 +12,7 @@ import { SPEECH_SERVICE } from '@app/speech';
 import { TraceContextService } from '@app/tracing';
 import {
   CLOSE_CODES,
+  ERROR_CODES,
   IdempotencyCache,
   SESSION_LIMITS,
   type Platform,
@@ -27,6 +28,8 @@ import { DictateService } from './dictate.service.js';
 import { SessionRegistry } from './session-registry.js';
 
 const TICK_MS = 1_000;
+export const MAX_DICTATION_FRAME_BYTES = 256 * 1024;
+const WS_INTERNAL_CLOSE = 1011;
 
 export function closeCodeForAuthError(_error?: unknown): number {
   return CLOSE_CODES.unauthenticated;
@@ -65,7 +68,7 @@ type DictateSocket = {
   connectMs?: number;
 };
 
-@WebSocketGateway({ path: '/v1/dictate' })
+@WebSocketGateway({ path: '/v1/dictate', maxPayload: MAX_DICTATION_FRAME_BYTES })
 export class DictateGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
@@ -125,6 +128,14 @@ export class DictateGateway
     client.lastActivityMs = Date.now();
     try {
       const buffer = toBuffer(data);
+      if (buffer.byteLength > MAX_DICTATION_FRAME_BYTES) {
+        this.flush(
+          client,
+          service,
+          service.failUnexpected(new SyntaxError('frame too large')),
+        );
+        return;
+      }
       const message =
         Buffer.isBuffer(buffer) && !isUtf8Json(buffer)
           ? await service.onBinary(buffer)
@@ -183,11 +194,20 @@ export class DictateGateway
     }
     if (
       !payload.sub ||
-      !payload.sid ||
-      !payload.platform ||
-      !payload.deviceId
+      !payload.sid
     ) {
       client.close(closeCodeForAuthError());
+      return;
+    }
+
+    let access: Awaited<ReturnType<AuthService['loadAccessSession']>>;
+    try {
+      access = await this.authService.loadAccessSession({
+        sub: payload.sub,
+        sid: payload.sid,
+      });
+    } catch (error) {
+      client.close(closeCodeForAuthError(error));
       return;
     }
 
@@ -197,16 +217,25 @@ export class DictateGateway
         this.quota.send<CheckQuotaResponseDto, CheckQuotaRequestDto>(
           QUOTA_CHECK_PATTERN,
           {
-            userId: payload.sub,
-            sessionId: payload.sid,
-            platform: payload.platform,
-            clientVersion: '',
-            deviceId: payload.deviceId,
+            userId: access.user.id,
+            sessionId: access.session.id,
+            platform: access.session.platform,
+            clientVersion: access.session.clientVersion,
+            deviceId: access.session.deviceId,
           },
         ),
       );
     } catch {
-      client.close(CLOSE_CODES.normal);
+      client.send(
+        JSON.stringify({
+          type: 'error',
+          requestId: '',
+          code: 'internal',
+          message: 'Unexpected server error.',
+          retryable: ERROR_CODES.internal.retryable,
+        }),
+      );
+      client.close(WS_INTERNAL_CLOSE, 'internal');
       return;
     }
     if (!check.allowed) {
@@ -215,25 +244,18 @@ export class DictateGateway
       return;
     }
 
-    let email: string | undefined;
-    try {
-      email = (await this.authService.getMe(payload.sub)).email;
-    } catch {
-      email = undefined;
-    }
-
     client.connectMs = Date.now() - (client.connectedAtMs ?? Date.now());
     client.dictateService = new DictateService(
       this.quota,
       this.speech,
       this.outbox,
       {
-        userId: payload.sub,
-        sessionId: payload.sid,
-        platform: payload.platform,
-        deviceId: payload.deviceId,
-        clientVersion: '',
-        email,
+        userId: access.user.id,
+        sessionId: access.session.id,
+        platform: access.session.platform,
+        deviceId: access.session.deviceId,
+        clientVersion: access.session.clientVersion,
+        email: access.user.email,
       },
       this.cache,
       this.registry,

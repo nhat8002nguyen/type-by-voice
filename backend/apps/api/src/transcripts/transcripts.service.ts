@@ -20,6 +20,8 @@ export class TranscriptsService {
         this.workflows.send('transcripts.search', {
           userId,
           q: query.q,
+          ...(query.cursor ? { cursor: query.cursor } : {}),
+          limit: query.limit ?? DEFAULT_TRANSCRIPT_LIST_LIMIT,
         }),
       );
       return Array.isArray(result) ? { items: result } : result;

@@ -189,7 +189,7 @@ describe('DictateService', () => {
     expect(service.takePendingClose()?.reason).toBe('internal');
   });
 
-  it('outbox enqueue throw fails transcription as internal', async () => {
+  it('still returns final when workflows outbox enqueue throws after commit', async () => {
     const quota = {
       send: vi.fn((pattern: string) =>
         of(
@@ -234,9 +234,17 @@ describe('DictateService', () => {
     );
     await service.onText(loadFixture<StartMessage>('start.valid.json'));
     await service.onBinary(Buffer.from('OggS'));
-    const error = await service.onText(loadFixture('stop.valid.json'));
-    expect(error).toMatchObject({ type: 'error', code: 'internal' });
-    expect(service.takePendingClose()?.reason).toBe('internal');
+    const final = await service.onText(loadFixture('stop.valid.json'));
+    expect(final).toMatchObject({
+      type: 'final',
+      text: 'the transcribed text',
+      wordCount: 3,
+    });
+    expect(quota.send).toHaveBeenCalledWith(
+      'quota.commit',
+      expect.objectContaining({ wordCount: 3 }),
+    );
+    expect(outbox.enqueue).toHaveBeenCalled();
   });
 
   it('enqueues quota-warning when remaining words are under 20% of limit', async () => {

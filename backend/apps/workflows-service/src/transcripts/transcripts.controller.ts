@@ -9,6 +9,7 @@ import {
   RmqContext,
 } from '@nestjs/microservices';
 import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import type { Channel, Message } from 'amqplib';
 import { TranscriptsService } from './transcripts.service.js';
 
@@ -35,6 +36,16 @@ export class TranscriptsGetDto extends TranscriptsUserDto {
 export class TranscriptsSearchDto extends TranscriptsUserDto {
   @IsString()
   q: string;
+
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number;
 }
 
 @Controller()
@@ -98,7 +109,10 @@ export class TranscriptsController {
 
   @MessagePattern('transcripts.search')
   search(@Payload() dto: TranscriptsSearchDto) {
-    return this.transcriptsService.search(dto.userId, dto.q);
+    return this.transcriptsService.search(dto.userId, dto.q, {
+      cursor: dto.cursor,
+      limit: dto.limit,
+    });
   }
 
   @MessagePattern('transcripts.export')

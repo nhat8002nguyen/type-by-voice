@@ -46,8 +46,9 @@ function prune(window: HitWindow, nowMs: number): number[] {
 
 /**
  * In-memory auth limiter used by unit tests.
- * Production multi-replica sharing uses Redis INCR+EXPIRE on
- * `rl:ip:{ip}`, `rl:email:{email}`, and `lock:email:{email}`.
+ * Production multi-replica sharing uses Redis INCR + EXPIRE NX on
+ * `rl:ip:{ip}` and `rl:email:{email}` (fixed 60s window from first hit),
+ * and INCR+EXPIRE on every `lock:email:{email}` failure.
  */
 export class AuthLimiter {
   readonly #nowMs: () => number;
@@ -121,7 +122,9 @@ export class AuthLimiter {
   }
 }
 
-type RedisLike = Pick<Redis, 'incr' | 'expire' | 'get' | 'del' | 'ttl'>;
+type RedisLike = Pick<Redis, 'incr' | 'get' | 'del' | 'ttl'> & {
+  expire(key: string, seconds: number, mode?: 'NX'): Promise<unknown>;
+};
 
 @Injectable()
 export class RateLimitGuard implements CanActivate, OnModuleDestroy {
@@ -228,9 +231,7 @@ async function incrExpire(
   limit: number,
 ): Promise<boolean> {
   const n = await redis.incr(key);
-  if (n === 1) {
-    await redis.expire(key, WINDOW_SEC);
-  }
+  await redis.expire(key, WINDOW_SEC, 'NX');
   return n <= limit;
 }
 

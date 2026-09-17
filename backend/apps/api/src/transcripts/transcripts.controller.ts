@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  NotFoundException,
   Param,
   Query,
   UseGuards,
@@ -65,8 +66,12 @@ export class TranscriptsController {
   }
 
   @Get(':id')
-  get(@CurrentUser() user: TranscriptsActor, @Param('id') id: string) {
-    return this.transcriptsService.get(toUserId(user), id);
+  async get(@CurrentUser() user: TranscriptsActor, @Param('id') id: string) {
+    const item = await this.transcriptsService.get(toUserId(user), id);
+    if (item == null) {
+      throw new NotFoundException();
+    }
+    return item;
   }
 
   @Delete(':id')

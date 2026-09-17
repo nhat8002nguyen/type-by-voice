@@ -5,11 +5,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
 import type { Platform } from '@type-by-voice/dictation-v1';
-import { Repository } from 'typeorm';
-import { Session } from './entities/session.entity.js';
-import { User } from './entities/user.entity.js';
+import { AuthService } from './auth.service.js';
 
 export const REQUEST_USER_KEY = 'user';
 
@@ -27,10 +24,7 @@ export type RequestUser = {
 export class AccessAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
-    @InjectRepository(Session)
-    private readonly sessions: Repository<Session>,
-    @InjectRepository(User)
-    private readonly users: Repository<User>,
+    private readonly authService: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -58,20 +52,10 @@ export class AccessAuthGuard implements CanActivate {
       throw new UnauthorizedException();
     }
 
-    const session = await this.sessions.findOneBy({ id: payload.sid });
-    if (
-      !session ||
-      session.userId !== payload.sub ||
-      session.revokedAt != null ||
-      session.expiresAt.getTime() <= Date.now()
-    ) {
-      throw new UnauthorizedException();
-    }
-
-    const user = await this.users.findOneBy({ id: payload.sub });
-    if (!user) {
-      throw new UnauthorizedException();
-    }
+    const { user, session } = await this.authService.loadAccessSession({
+      sub: payload.sub,
+      sid: payload.sid,
+    });
 
     request[REQUEST_USER_KEY] = {
       id: user.id,

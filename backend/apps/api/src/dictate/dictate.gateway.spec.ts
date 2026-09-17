@@ -1,12 +1,14 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { CLOSE_CODES, loadFixture } from '@type-by-voice/dictation-v1';
 import type { IncomingMessage } from 'node:http';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   closeCodeForAuthError,
   closeCodeForQuota,
   closeCodeForRateLimit,
   DictateGateway,
+  MAX_DICTATION_FRAME_BYTES,
 } from './dictate.gateway.js';
 import { SessionRegistry } from './session-registry.js';
 
@@ -68,6 +70,45 @@ describe('DictateGateway connection', () => {
     });
     await gateway.handleConnection(socket, authReq());
     expect(socket.closeCalls[0]?.code).toBe(4429);
+  });
+
+  it('closes 4401 when the session row is revoked or expired', async () => {
+    const quotaSend = vi.fn().mockReturnValue(of({ allowed: true }));
+    const { gateway, socket } = createHarness({
+      loadAccessSession: vi
+        .fn()
+        .mockRejectedValue(new UnauthorizedException()),
+      quotaSend,
+    });
+    await gateway.handleConnection(socket, authReq());
+    expect(socket.closeCalls[0]?.code).toBe(4401);
+    expect(quotaSend).not.toHaveBeenCalled();
+  });
+
+  it('sends a retryable internal error when quota.check throws at upgrade', async () => {
+    const { gateway, socket } = createHarness({
+      quotaSend: vi.fn().mockReturnValue(throwError(() => new Error('quota down'))),
+    });
+    await gateway.handleConnection(socket, authReq());
+    expect(socket.sent[0]).toMatchObject({
+      type: 'error',
+      code: 'internal',
+      retryable: true,
+    });
+    expect(socket.closeCalls[0]?.code).not.toBe(CLOSE_CODES.normal);
+    expect(socket.closeCalls[0]?.code).not.toBe(1000);
+  });
+
+  it('rejects an oversized frame as invalid_request', async () => {
+    const { gateway, socket } = createHarness();
+    await gateway.handleConnection(socket, authReq());
+    socket.emitMessage(JSON.stringify(loadFixture('start.valid.json')));
+    await socket.flush();
+    socket.emitMessage(Buffer.alloc(MAX_DICTATION_FRAME_BYTES + 1, 1));
+    await socket.flush();
+    expect(socket.sent.some((message) => message.code === 'invalid_request')).toBe(
+      true,
+    );
   });
 
   it('does not idle-close while stop is awaiting transcribe', async () => {
@@ -146,6 +187,8 @@ function fromPromise<T>(promise: Promise<T>) {
 function createHarness(options?: {
   verifyAsync?: ReturnType<typeof vi.fn>;
   speechSend?: ReturnType<typeof vi.fn>;
+  quotaSend?: ReturnType<typeof vi.fn>;
+  loadAccessSession?: ReturnType<typeof vi.fn>;
   limiter?: { allowDictateUpgrade: (ip: string) => boolean };
 }) {
   const quotaSnapshot = {
@@ -154,20 +197,23 @@ function createHarness(options?: {
     used: 312,
     resetAt: '2026-09-18T04:12:00Z',
   };
+  const payload = jwtPayload();
   const socket = new FakeSocket();
   const gateway = new DictateGateway(
     {
       verifyAsync:
-        options?.verifyAsync ?? vi.fn().mockResolvedValue(jwtPayload()),
+        options?.verifyAsync ?? vi.fn().mockResolvedValue(payload),
     } as never,
     {
-      send: vi.fn((pattern: string) =>
-        of(
-          pattern === 'quota.commit'
-            ? { quota: { ...quotaSnapshot, used: 315 } }
-            : { allowed: true, quota: quotaSnapshot },
+      send:
+        options?.quotaSend ??
+        vi.fn((pattern: string) =>
+          of(
+            pattern === 'quota.commit'
+              ? { quota: { ...quotaSnapshot, used: 315 } }
+              : { allowed: true, quota: quotaSnapshot },
+          ),
         ),
-      ),
     } as never,
     {
       send:
@@ -184,10 +230,25 @@ function createHarness(options?: {
     new SessionRegistry(),
     {
       getMe: vi.fn().mockResolvedValue({
-        id: jwtPayload().sub,
+        id: payload.sub,
         email: 'a@b.co',
         emailVerifiedAt: null,
       }),
+      loadAccessSession:
+        options?.loadAccessSession ??
+        vi.fn().mockResolvedValue({
+          user: {
+            id: payload.sub,
+            email: 'a@b.co',
+            emailVerifiedAt: null,
+          },
+          session: {
+            id: payload.sid,
+            platform: payload.platform,
+            deviceId: payload.deviceId,
+            clientVersion: '1.0.0+12',
+          },
+        }),
     } as never,
     undefined,
     options?.limiter as never,

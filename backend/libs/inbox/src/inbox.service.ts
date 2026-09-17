@@ -64,6 +64,11 @@ export class InboxService {
     }
   }
 
+  async exists(messageId: string): Promise<boolean> {
+    const row = await this.inboxRepository.findOneBy({ messageId });
+    return row != null;
+  }
+
   async claimPending(options: {
     take: number;
     maxAttempts: number;

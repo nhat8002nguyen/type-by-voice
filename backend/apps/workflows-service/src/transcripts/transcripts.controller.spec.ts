@@ -112,14 +112,14 @@ describe('TranscriptsController', () => {
       userId: 'user-1',
       q: 'transcribed',
     });
-    expect(hits).toHaveLength(1);
+    expect(hits.items).toHaveLength(1);
 
     const exported = await controller.export({ userId: 'user-1' });
     expect(exported).toHaveLength(1);
 
     await controller.delete({ userId: 'user-1', id: listed.items[0].id });
     expect(
-      await controller.search({ userId: 'user-1', q: 'transcribed' }),
+      (await controller.search({ userId: 'user-1', q: 'transcribed' })).items,
     ).toHaveLength(0);
     expect(await controller.export({ userId: 'user-1' })).toHaveLength(0);
   });

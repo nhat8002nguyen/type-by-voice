@@ -95,11 +95,20 @@ export class TranscriptsService {
     return this.toPublic(await this.persist(row, em));
   }
 
-  async search(userId: string, q: string): Promise<PublicTranscript[]> {
+  async search(
+    userId: string,
+    q: string,
+    options?: { cursor?: string; limit?: number },
+  ): Promise<TranscriptListPage> {
     const needle = q.toLowerCase();
-    return (await this.loadVisible(userId))
+    const items = (await this.loadVisible(userId))
+      .sort(compareNewestFirst)
       .map((row) => this.toPublic(row))
       .filter((item) => item.text.toLowerCase().includes(needle));
+    return paginatePublic(items, {
+      cursor: options?.cursor,
+      limit: options?.limit ?? Math.max(items.length, 1),
+    });
   }
 
   async get(userId: string, id: string): Promise<PublicTranscript | null> {
@@ -127,20 +136,10 @@ export class TranscriptsService {
     userId: string,
     options: { cursor?: string; limit: number },
   ): Promise<TranscriptListPage> {
-    const rows = (await this.loadVisible(userId)).sort(compareNewestFirst);
-    let start = 0;
-    if (options.cursor) {
-      const index = rows.findIndex((row) => row.id === options.cursor);
-      start = index === -1 ? rows.length : index + 1;
-    }
-    const sliced = rows.slice(start, start + options.limit);
-    const hasMore = start + options.limit < rows.length;
-    return {
-      items: sliced.map((row) => this.toPublic(row)),
-      ...(hasMore && sliced.length > 0
-        ? { nextCursor: sliced[sliced.length - 1].id }
-        : {}),
-    };
+    const items = (await this.loadVisible(userId))
+      .sort(compareNewestFirst)
+      .map((row) => this.toPublic(row));
+    return paginatePublic(items, options);
   }
 
   private store(em?: EntityManager): Repository<Transcript> | undefined {
@@ -219,6 +218,25 @@ export class TranscriptsService {
       createdAt: row.createdAt,
     };
   }
+}
+
+function paginatePublic(
+  items: PublicTranscript[],
+  options: { cursor?: string; limit: number },
+): TranscriptListPage {
+  let start = 0;
+  if (options.cursor) {
+    const index = items.findIndex((item) => item.id === options.cursor);
+    start = index === -1 ? items.length : index + 1;
+  }
+  const sliced = items.slice(start, start + options.limit);
+  const hasMore = start + options.limit < items.length;
+  return {
+    items: sliced,
+    ...(hasMore && sliced.length > 0
+      ? { nextCursor: sliced[sliced.length - 1].id }
+      : {}),
+  };
 }
 
 function compareNewestFirst(a: Transcript, b: Transcript): number {

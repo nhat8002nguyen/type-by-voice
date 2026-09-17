@@ -9,8 +9,10 @@ export function createSpeechProvider(
   if (apiKey) {
     return new GroqSpeechProvider({ apiKey });
   }
-  if (requested === 'fake') {
-    return new FakeSpeechProvider();
+  if (requested === 'groq' || env.NODE_ENV === 'production') {
+    throw new Error(
+      'GROQ_API_KEY is required when SPEECH_PROVIDER=groq or NODE_ENV=production',
+    );
   }
   return new FakeSpeechProvider();
 }

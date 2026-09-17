@@ -1,13 +1,10 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccessAuthGuard } from '../auth/access-auth.guard.js';
 import { AuthService } from '../auth/auth.service.js';
-import { Session } from '../auth/entities/session.entity.js';
-import { User } from '../auth/entities/user.entity.js';
 import { UsersController } from './users.controller.js';
 
 const user = {
@@ -102,8 +99,6 @@ describe('Users HTTP access guard', () => {
         AccessAuthGuard,
         { provide: AuthService, useValue: { getMe: vi.fn() } },
         { provide: JwtService, useValue: new JwtService({ secret: 'test' }) },
-        { provide: getRepositoryToken(Session), useValue: {} },
-        { provide: getRepositoryToken(User), useValue: {} },
       ],
     }).compile();
 

@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
   NOTIFICATIONS_EMAIL_EVENT,
   NOTIFICATIONS_SERVICE,
@@ -15,7 +15,7 @@ import {
 import { OutboxService } from '../../../../libs/outbox/src/outbox.service.js';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
-import { IsNull, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, IsNull, QueryFailedError, Repository } from 'typeorm';
 import { assertClientIdentity } from './assert-client-identity.js';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
@@ -65,6 +65,10 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -74,6 +78,8 @@ export class AuthService {
     private readonly sessions: Repository<Session>,
     @InjectRepository(AuthToken)
     private readonly tokens: Repository<AuthToken>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
     private readonly outbox: OutboxService,
     @Optional() private readonly rateLimit?: RateLimitGuard,
@@ -81,7 +87,8 @@ export class AuthService {
 
   async register(dto: RegisterDto, userAgent?: string): Promise<AuthTokens> {
     assertClientIdentity(dto);
-    const existing = await this.users.findOneBy({ email: dto.email });
+    const email = normalizeEmail(dto.email);
+    const existing = await this.users.findOneBy({ email });
     if (existing) {
       throw new ConflictException();
     }
@@ -93,7 +100,7 @@ export class AuthService {
     try {
       user = await this.users.save(
         this.users.create({
-          email: dto.email,
+          email,
           passwordHash,
           emailVerifiedAt: null,
         }),
@@ -122,8 +129,9 @@ export class AuthService {
     ip?: string,
   ): Promise<AuthTokens> {
     assertClientIdentity(dto);
+    const email = normalizeEmail(dto.email);
     try {
-      const user = await this.users.findOneBy({ email: dto.email });
+      const user = await this.users.findOneBy({ email });
       if (!user) {
         throw new UnauthorizedException();
       }
@@ -140,11 +148,11 @@ export class AuthService {
         rotate: true,
         userAgent,
       });
-      await this.rateLimit?.recordSuccess(dto.email);
+      await this.rateLimit?.recordSuccess(email);
       return tokens;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
-        await this.rateLimit?.recordFailure(dto.email, ip ?? '');
+        await this.rateLimit?.recordFailure(email, ip ?? '');
       }
       throw error;
     }
@@ -203,7 +211,7 @@ export class AuthService {
   }
 
   async forgotPassword(email: string): Promise<void> {
-    const user = await this.users.findOneBy({ email });
+    const user = await this.users.findOneBy({ email: normalizeEmail(email) });
     if (!user) {
       return;
     }
@@ -218,15 +226,53 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string): Promise<void> {
-    const authToken = await this.consumeToken(token, 'reset-password');
-    const user = await this.users.findOneBy({ id: authToken.userId });
+    const passwordHash = await argon2.hash(password, {
+      type: argon2.argon2id,
+    });
+    await this.dataSource.transaction(async (em) => {
+      const tokens = em.getRepository(AuthToken);
+      const users = em.getRepository(User);
+      const sessions = em.getRepository(Session);
+      const authToken = await this.consumeTokenIn(
+        tokens,
+        token,
+        'reset-password',
+      );
+      const user = await users.findOneBy({ id: authToken.userId });
+      if (!user) {
+        throw new UnauthorizedException();
+      }
+      user.passwordHash = passwordHash;
+      await users.save(user);
+      await sessions.update(
+        { userId: user.id, revokedAt: IsNull() },
+        { revokedAt: new Date() },
+      );
+      await tokens.update(
+        { userId: user.id, purpose: 'reset-password', consumedAt: IsNull() },
+        { consumedAt: new Date() },
+      );
+    });
+  }
+
+  async loadAccessSession(payload: { sub: string; sid: string }): Promise<{
+    user: User;
+    session: Session;
+  }> {
+    const session = await this.sessions.findOneBy({ id: payload.sid });
+    if (
+      !session ||
+      session.userId !== payload.sub ||
+      session.revokedAt != null ||
+      session.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new UnauthorizedException();
+    }
+    const user = await this.users.findOneBy({ id: payload.sub });
     if (!user) {
       throw new UnauthorizedException();
     }
-    user.passwordHash = await argon2.hash(password, {
-      type: argon2.argon2id,
-    });
-    await this.users.save(user);
+    return { user, session };
   }
 
   async getMe(userId: string): Promise<UserProfile> {
@@ -284,7 +330,15 @@ export class AuthService {
     token: string,
     purpose: AuthTokenPurpose,
   ): Promise<AuthToken> {
-    const authToken = await this.tokens.findOneBy({
+    return this.consumeTokenIn(this.tokens, token, purpose);
+  }
+
+  private async consumeTokenIn(
+    tokens: Repository<AuthToken>,
+    token: string,
+    purpose: AuthTokenPurpose,
+  ): Promise<AuthToken> {
+    const authToken = await tokens.findOneBy({
       tokenHash: hashToken(token),
       purpose,
     });
@@ -296,7 +350,7 @@ export class AuthService {
       throw new UnauthorizedException();
     }
     authToken.consumedAt = new Date();
-    await this.tokens.save(authToken);
+    await tokens.save(authToken);
     return authToken;
   }
 
@@ -319,30 +373,15 @@ export class AuthService {
     options?: { rotate?: boolean; userAgent?: string },
   ): Promise<AuthTokens> {
     const deviceId = identity.deviceId.toLowerCase();
-    if (options?.rotate) {
-      const active = await this.sessions.findOne({
-        where: { userId: user.id, deviceId, revokedAt: IsNull() },
-      });
-      if (active) {
-        active.revokedAt = new Date();
-        await this.sessions.save(active);
-      }
-    }
-
     const refreshToken = randomBytes(32).toString('hex');
-    const session = await this.sessions.save(
-      this.sessions.create({
-        userId: user.id,
-        refreshTokenHash: hashToken(refreshToken),
-        platform: identity.platform,
-        clientVersion: identity.clientVersion,
-        deviceId,
-        userAgent: options?.userAgent ?? null,
-        createdAt: new Date(),
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
-        revokedAt: null,
-      }),
-    );
+    const session = await this.saveRotatedSession({
+      user,
+      identity,
+      deviceId,
+      refreshToken,
+      rotate: options?.rotate === true,
+      userAgent: options?.userAgent,
+    });
 
     const accessToken = await this.jwtService.signAsync(
       {
@@ -359,5 +398,51 @@ export class AuthService {
       refreshToken,
       expiresIn: ACCESS_TOKEN_TTL_SECONDS,
     };
+  }
+
+  private async saveRotatedSession(input: {
+    user: User;
+    identity: ClientIdentityDto;
+    deviceId: string;
+    refreshToken: string;
+    rotate: boolean;
+    userAgent?: string;
+  }): Promise<Session> {
+    const persist = (): Promise<Session> =>
+      this.dataSource.transaction(async (em) => {
+        const sessions = em.getRepository(Session);
+        if (input.rotate) {
+          await sessions.update(
+            {
+              userId: input.user.id,
+              deviceId: input.deviceId,
+              revokedAt: IsNull(),
+            },
+            { revokedAt: new Date() },
+          );
+        }
+        return sessions.save(
+          sessions.create({
+            userId: input.user.id,
+            refreshTokenHash: hashToken(input.refreshToken),
+            platform: input.identity.platform,
+            clientVersion: input.identity.clientVersion,
+            deviceId: input.deviceId,
+            userAgent: input.userAgent ?? null,
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+            revokedAt: null,
+          }),
+        );
+      });
+
+    try {
+      return await persist();
+    } catch (error) {
+      if (!input.rotate || !isUniqueViolation(error)) {
+        throw error;
+      }
+      return persist();
+    }
   }
 }

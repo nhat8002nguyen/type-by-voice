@@ -1,13 +1,11 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { AccessAuthGuard } from '../auth/access-auth.guard.js';
-import { Session } from '../auth/entities/session.entity.js';
-import { User } from '../auth/entities/user.entity.js';
+import { AuthService } from '../auth/auth.service.js';
 import { WORKFLOWS_SERVICE } from '../../../../libs/workflows/src/tokens.js';
 import { TranscriptsController } from './transcripts.controller.js';
 
@@ -22,7 +20,7 @@ describe('TranscriptsController', () => {
       .compile();
   }
 
-  it('GET /v1/transcripts passes q and userId', async () => {
+  it('GET /v1/transcripts passes q, cursor, and limit', async () => {
     const send = vi.fn().mockReturnValue(of({ items: [], nextCursor: undefined }));
     const module = await Test.createTestingModule({
       controllers: [TranscriptsController],
@@ -31,8 +29,16 @@ describe('TranscriptsController', () => {
       .overrideGuard(AccessAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
-    const result = await module.get(TranscriptsController).list({ userId: 'user-1' }, { q: 'hello' });
-    expect(send).toHaveBeenCalledWith('transcripts.search', { userId: 'user-1', q: 'hello' });
+    const result = await module.get(TranscriptsController).list(
+      { userId: 'user-1' },
+      { q: 'hello', cursor: 'c1', limit: 5 },
+    );
+    expect(send).toHaveBeenCalledWith('transcripts.search', {
+      userId: 'user-1',
+      q: 'hello',
+      cursor: 'c1',
+      limit: 5,
+    });
     expect(result.items).toEqual([]);
   });
 
@@ -93,6 +99,14 @@ describe('TranscriptsController', () => {
       id: 't1',
     });
     expect(result).toEqual(item);
+  });
+
+  it('GET /v1/transcripts/:id maps a missing row to 404', async () => {
+    const send = vi.fn().mockReturnValue(of(null));
+    const module = await compile(send);
+    await expect(
+      module.get(TranscriptsController).get({ userId: 'user-1' }, 'missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('DELETE /v1/transcripts/:id sends transcripts.delete', async () => {
@@ -162,6 +176,7 @@ describe('Transcripts HTTP', () => {
     expect(send).toHaveBeenCalledWith('transcripts.search', {
       userId: 'user-1',
       q: 'hello',
+      limit: 20,
     });
   });
 
@@ -169,6 +184,12 @@ describe('Transcripts HTTP', () => {
     await createApp(vi.fn().mockReturnValue(of(undefined)));
     const response = await request(app.getHttpServer()).delete('/v1/transcripts/t1');
     expect(response.status).toBe(204);
+  });
+
+  it('returns 404 when GET /v1/transcripts/:id is missing', async () => {
+    await createApp(vi.fn().mockReturnValue(of(null)));
+    const response = await request(app.getHttpServer()).get('/v1/transcripts/missing');
+    expect(response.status).toBe(404);
   });
 
   it('GET /v1/transcripts/export is not captured as :id', async () => {
@@ -197,8 +218,7 @@ describe('Transcripts HTTP access guard', () => {
         AccessAuthGuard,
         { provide: WORKFLOWS_SERVICE, useValue: { send: vi.fn() } },
         { provide: JwtService, useValue: new JwtService({ secret: 'test' }) },
-        { provide: getRepositoryToken(Session), useValue: {} },
-        { provide: getRepositoryToken(User), useValue: {} },
+        { provide: AuthService, useValue: {} },
       ],
     }).compile();
 

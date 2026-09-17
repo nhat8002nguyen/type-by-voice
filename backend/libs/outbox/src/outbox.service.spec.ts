@@ -8,6 +8,7 @@ describe('OutboxService', () => {
   let service: OutboxService;
   let repository: {
     find: ReturnType<typeof vi.fn>;
+    findOneBy: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     save: ReturnType<typeof vi.fn>;
@@ -16,6 +17,7 @@ describe('OutboxService', () => {
   beforeEach(async () => {
     repository = {
       find: vi.fn(),
+      findOneBy: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
       save: vi.fn(),
@@ -53,11 +55,49 @@ describe('OutboxService', () => {
   });
 
   it('marks a message as processed', async () => {
+    repository.findOneBy = vi.fn().mockResolvedValue({
+      id: 7,
+      status: 'pending',
+      payload: { userId: 'user-1', requestId: 'r1' },
+    });
     repository.update.mockResolvedValue(undefined);
 
     await service.markAsProcessed(7);
 
-    expect(repository.update).toHaveBeenCalledWith(7, { status: 'processed' });
+    expect(repository.update).toHaveBeenCalledWith(7, {
+      status: 'processed',
+      payload: { userId: 'user-1', requestId: 'r1' },
+    });
+  });
+
+  it('redacts payload.text when marking a transcript outbox row processed', async () => {
+    repository.findOneBy = vi.fn().mockResolvedValue({
+      id: 7,
+      status: 'pending',
+      payload: {
+        userId: 'user-1',
+        requestId: 'r1',
+        text: 'the transcribed text',
+        wordCount: 3,
+        audioMs: 100,
+      },
+    });
+    repository.update.mockResolvedValue(undefined);
+
+    await service.markAsProcessed(7);
+
+    expect(repository.update).toHaveBeenCalledWith(7, {
+      status: 'processed',
+      payload: {
+        userId: 'user-1',
+        requestId: 'r1',
+        wordCount: 3,
+        audioMs: 100,
+      },
+    });
+    expect(JSON.stringify(repository.update.mock.calls[0]?.[1])).not.toContain(
+      'the transcribed text',
+    );
   });
 
   it('inserts a pending outbox row', async () => {

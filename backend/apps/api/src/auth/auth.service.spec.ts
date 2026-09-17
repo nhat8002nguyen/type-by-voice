@@ -5,7 +5,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { OutboxService } from '../../../../libs/outbox/src/outbox.service.js';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
-import { FindOperator } from 'typeorm';
+import { DataSource, FindOperator } from 'typeorm';
 import { describe, expect, it } from 'vitest';
 import { AuthService } from './auth.service.js';
 import { AuthToken } from './entities/auth-token.entity.js';
@@ -62,6 +62,19 @@ function createInMemoryRepo<T extends Row>(rows: T[]) {
       rows.find((row) => matches(row, options.where)) ?? null,
     findOneBy: async (where: Record<string, unknown>) =>
       rows.find((row) => matches(row, where)) ?? null,
+    update: async (
+      where: Record<string, unknown>,
+      partial: Record<string, unknown>,
+    ) => {
+      let affected = 0;
+      for (const row of rows) {
+        if (matches(row, where)) {
+          Object.assign(row, partial);
+          affected += 1;
+        }
+      }
+      return { affected };
+    },
   };
 }
 
@@ -70,9 +83,36 @@ async function buildHarness() {
   const sessions: Session[] = [];
   const tokens: AuthToken[] = [];
   const outbox: OutboxRow[] = [];
+  const userRepo = createInMemoryRepo(users);
+  const sessionRepo = createInMemoryRepo(sessions);
+  const tokenRepo = createInMemoryRepo(tokens);
   const module = await Test.createTestingModule({
     providers: [
       AuthService,
+      {
+        provide: DataSource,
+        useValue: {
+          transaction: async (
+            run: (em: {
+              getRepository: (entity: unknown) => unknown;
+            }) => Promise<unknown>,
+          ) =>
+            run({
+              getRepository: (entity: unknown) => {
+                if (entity === User) {
+                  return userRepo;
+                }
+                if (entity === Session) {
+                  return sessionRepo;
+                }
+                if (entity === AuthToken) {
+                  return tokenRepo;
+                }
+                throw new Error('unknown entity');
+              },
+            }),
+        },
+      },
       {
         provide: OutboxService,
         useValue: {
@@ -96,15 +136,15 @@ async function buildHarness() {
       },
       {
         provide: getRepositoryToken(User),
-        useValue: createInMemoryRepo(users),
+        useValue: userRepo,
       },
       {
         provide: getRepositoryToken(Session),
-        useValue: createInMemoryRepo(sessions),
+        useValue: sessionRepo,
       },
       {
         provide: getRepositoryToken(AuthToken),
-        useValue: createInMemoryRepo(tokens),
+        useValue: tokenRepo,
       },
       { provide: JwtService, useValue: new JwtService({ secret: 'test' }) },
     ],
@@ -177,6 +217,19 @@ describe('AuthService.register', () => {
       service.register({ ...credentials, ...identity }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it('normalizes email case on write so mixed-case duplicates conflict', async () => {
+    const { service, users } = await buildHarness();
+    await service.register({
+      ...credentials,
+      ...identity,
+      email: 'A@B.CO',
+    });
+    expect(users[0]?.email).toBe('a@b.co');
+    await expect(
+      service.register({ ...credentials, ...identity, email: 'a@b.co' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
 });
 
 describe('AuthService.login', () => {
@@ -234,6 +287,17 @@ describe('AuthService.login', () => {
         password: 'wrong password',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('looks up the account by normalized email', async () => {
+    const service = await buildService();
+    await service.register({ ...credentials, ...identity, email: 'A@B.CO' });
+    const loggedIn = await service.login({
+      ...credentials,
+      ...identity,
+      email: 'a@b.co',
+    });
+    expect(loggedIn.accessToken).toEqual(expect.any(String));
   });
 });
 
@@ -337,6 +401,31 @@ describe('AuthService.resetPassword', () => {
       argon2.verify(users[0]!.passwordHash, 'new horse battery staple'),
     ).resolves.toBe(true);
   });
+
+  it('revokes every session and remaining reset tokens with the password update', async () => {
+    const { service, sessions, tokens, outbox } = await buildHarness();
+    const registered = await service.register({ ...credentials, ...identity });
+    await service.login({
+      ...credentials,
+      ...identity,
+      deviceId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee1',
+    });
+    outbox.length = 0;
+    await service.forgotPassword(credentials.email);
+    await service.forgotPassword(credentials.email);
+    const token = String(outbox[1]?.payload.token);
+    await service.resetPassword(token, 'new horse battery staple');
+
+    expect(sessions.every((session) => session.revokedAt != null)).toBe(true);
+    expect(
+      tokens
+        .filter((row) => row.purpose === 'reset-password')
+        .every((row) => row.consumedAt != null),
+    ).toBe(true);
+    await expect(
+      service.refresh(registered.refreshToken, identity),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
 });
 
 describe('AuthService profile and sessions', () => {
@@ -394,6 +483,20 @@ describe('AuthService profile and sessions', () => {
     );
     expect(sessions[0]?.deviceId).toBe('9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77');
     expect(sessions[0]?.userAgent).toBe('TypeByVoice/1.0');
+  });
+
+  it('rejects a revoked session on access load', async () => {
+    const { service, sessions } = await buildHarness();
+    const registered = await service.register({ ...credentials, ...identity });
+    const payload = new JwtService({ secret: 'test' }).verify<{
+      sub: string;
+      sid: string;
+    }>(registered.accessToken);
+    sessions.find((session) => session.id === payload.sid)!.revokedAt =
+      new Date();
+    await expect(service.loadAccessSession(payload)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('enqueues a verify-email outbox row on register', async () => {

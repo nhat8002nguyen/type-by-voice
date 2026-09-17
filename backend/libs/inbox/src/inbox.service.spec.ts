@@ -107,6 +107,19 @@ describe('InboxService', () => {
     await expect(service.storeIfNew(input)).resolves.toBe(true);
   });
 
+  it('exists is true when a messageId is already stored', async () => {
+    repository.findOneBy.mockResolvedValue({ id: 1, messageId: 'outbox:1' });
+    await expect(service.exists('outbox:1')).resolves.toBe(true);
+    expect(repository.findOneBy).toHaveBeenCalledWith({
+      messageId: 'outbox:1',
+    });
+  });
+
+  it('exists is false when a messageId is missing', async () => {
+    repository.findOneBy.mockResolvedValue(null);
+    await expect(service.exists('outbox:missing')).resolves.toBe(false);
+  });
+
   it('store rethrows errors that are not unique violations', async () => {
     repository.create.mockReturnValue({});
     repository.save.mockRejectedValue(new Error('db down'));

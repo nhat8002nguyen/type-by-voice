@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { ClientProxy } from '@nestjs/microservices';
 import type { OutboxService } from '@app/outbox';
@@ -79,6 +80,7 @@ export class DictateService {
   readonly #cache: IdempotencyCache;
   readonly #registry: SessionRegistry | undefined;
   readonly #metrics: DictateMetrics | undefined;
+  readonly #logger = new Logger(DictateService.name);
   readonly #startedAtMs = Date.now();
   #session: DictationSession | undefined;
   #pendingClose: DictateClose | undefined;
@@ -350,20 +352,38 @@ export class DictateService {
           },
         ),
       );
+    } catch {
+      return this.consume(session.failTranscription('internal'));
+    }
 
+    const createPayload = {
+      userId: this.#user.userId,
+      requestId: output.requestId,
+      text: result.text,
+      wordCount,
+      audioMs,
+    };
+    try {
       await this.#outbox.enqueue({
         type: WORKFLOWS_CREATE_EVENT,
         target: WORKFLOWS_SERVICE,
-        payload: {
-          userId: this.#user.userId,
-          requestId: output.requestId,
-          text: result.text,
-          wordCount,
-          audioMs,
-        },
+        payload: createPayload,
       });
     } catch {
-      return this.consume(session.failTranscription('internal'));
+      this.#logger.error(
+        `workflows outbox enqueue failed requestId=${output.requestId}`,
+      );
+      try {
+        await this.#outbox.enqueue({
+          type: WORKFLOWS_CREATE_EVENT,
+          target: WORKFLOWS_SERVICE,
+          payload: createPayload,
+        });
+      } catch {
+        this.#logger.error(
+          `workflows outbox enqueue retry failed requestId=${output.requestId}`,
+        );
+      }
     }
 
     await this.enqueueQuotaEmail(commit.quota).catch(() => undefined);
