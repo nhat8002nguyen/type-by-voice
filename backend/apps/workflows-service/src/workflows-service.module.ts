@@ -1,4 +1,5 @@
 import { InboxModule } from '@app/inbox';
+import { isObserveEnabled } from '@app/tracing';
 import { WORKFLOWS_CREATE_EVENT } from '@app/workflows';
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
@@ -28,11 +29,15 @@ class TranscriptsCoreModule {}
 
 @Module({
   imports: [
-    ObserveModule.forRoot({
-      appKey: process.env.OBSERVE_APP_KEY ?? '',
-      appSecret: process.env.OBSERVE_APP_SECRET ?? '',
-      serviceId: 'workflows-service',
-    }),
+    ...(isObserveEnabled()
+      ? [
+          ObserveModule.forRoot({
+            appKey: process.env.OBSERVE_APP_KEY ?? '',
+            appSecret: process.env.OBSERVE_APP_SECRET ?? '',
+            serviceId: 'workflows-service',
+          }),
+        ]
+      : []),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.POSTGRES_HOST ?? 'workflows-db',

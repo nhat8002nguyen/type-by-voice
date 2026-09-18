@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { of, throwError } from 'rxjs';
 import { loadFixture } from '@type-by-voice/dictation-v1';
+import {
+  QUOTA_CHECK_PATTERN,
+  QUOTA_COMMIT_PATTERN,
+} from '../../../../libs/quota/src/tokens.js';
 import { DictateService } from './dictate.service.js';
-import type { StartMessage } from '@type-by-voice/dictation-v1';
+import type { ReadyMessage, StartMessage } from '@type-by-voice/dictation-v1';
 
 describe('DictateService', () => {
   it('checks quota before ready and does not send audio on NATS until stop', async () => {
@@ -10,7 +14,7 @@ describe('DictateService', () => {
       send: vi
         .fn()
         .mockReturnValue(
-          of({ allowed: true, quota: loadFixture('ready.json').quota }),
+          of({ allowed: true, quota: loadFixture<ReadyMessage>('ready.json').quota }),
         ),
     };
     const speech = { send: vi.fn() };
@@ -23,7 +27,7 @@ describe('DictateService', () => {
     const ready = await service.onText(
       loadFixture<StartMessage>('start.valid.json'),
     );
-    expect(ready.type).toBe('ready');
+    expect(ready).toMatchObject({ type: 'ready' });
     expect(speech.send).not.toHaveBeenCalled();
     await service.onBinary(Buffer.from('OggS'));
     expect(speech.send).not.toHaveBeenCalled();
@@ -33,7 +37,7 @@ describe('DictateService', () => {
     const quota = {
       send: vi.fn((pattern: string) =>
         of(
-          pattern === 'quota.check'
+          pattern === QUOTA_CHECK_PATTERN
             ? {
                 allowed: true,
                 quota: {
@@ -79,7 +83,7 @@ describe('DictateService', () => {
     });
     expect(speech.send).toHaveBeenCalledOnce();
     expect(quota.send).toHaveBeenCalledWith(
-      'quota.commit',
+      QUOTA_COMMIT_PATTERN,
       expect.objectContaining({ wordCount: 3 }),
     );
   });
@@ -110,7 +114,7 @@ describe('DictateService', () => {
     await service.onText(loadFixture('cancel.valid.json'));
     expect(speech.send).not.toHaveBeenCalled();
     expect(quota.send).not.toHaveBeenCalledWith(
-      'quota.commit',
+      QUOTA_COMMIT_PATTERN,
       expect.anything(),
     );
   });
@@ -146,7 +150,7 @@ describe('DictateService', () => {
       code: 'provider_unavailable',
     });
     expect(quota.send).not.toHaveBeenCalledWith(
-      'quota.commit',
+      QUOTA_COMMIT_PATTERN,
       expect.anything(),
     );
   });
@@ -154,7 +158,7 @@ describe('DictateService', () => {
   it('quota commit throw fails transcription as internal', async () => {
     const quota = {
       send: vi.fn((pattern: string) =>
-        pattern === 'quota.commit'
+        pattern === QUOTA_COMMIT_PATTERN
           ? throwError(() => new Error('quota down'))
           : of({
               allowed: true,
@@ -193,7 +197,7 @@ describe('DictateService', () => {
     const quota = {
       send: vi.fn((pattern: string) =>
         of(
-          pattern === 'quota.check'
+          pattern === QUOTA_CHECK_PATTERN
             ? {
                 allowed: true,
                 quota: {
@@ -241,7 +245,7 @@ describe('DictateService', () => {
       wordCount: 3,
     });
     expect(quota.send).toHaveBeenCalledWith(
-      'quota.commit',
+      QUOTA_COMMIT_PATTERN,
       expect.objectContaining({ wordCount: 3 }),
     );
     expect(outbox.enqueue).toHaveBeenCalled();
@@ -251,7 +255,7 @@ describe('DictateService', () => {
     const quota = {
       send: vi.fn((pattern: string) =>
         of(
-          pattern === 'quota.check'
+          pattern === QUOTA_CHECK_PATTERN
             ? {
                 allowed: true,
                 quota: {
@@ -313,7 +317,7 @@ describe('DictateService', () => {
     const quota = {
       send: vi.fn((pattern: string) =>
         of(
-          pattern === 'quota.check'
+          pattern === QUOTA_CHECK_PATTERN
             ? {
                 allowed: true,
                 quota: {
@@ -374,11 +378,60 @@ describe('DictateService', () => {
     );
   });
 
+  it('does not enqueue quota emails when the plan has a null limit', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === QUOTA_CHECK_PATTERN
+            ? {
+                allowed: true,
+                quota: {
+                  unit: 'words',
+                  limit: null,
+                  used: 0,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              }
+            : {
+                quota: {
+                  unit: 'words',
+                  limit: null,
+                  used: 3,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
+    };
+    const outbox = outboxStub();
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outbox as never,
+      { ...jwtUser(), email: 'a@b.co' },
+    );
+    await service.onText(loadFixture<StartMessage>('start.valid.json'));
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('stop.valid.json'));
+    expect(outbox.enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'notifications.email' }),
+    );
+  });
+
   it('still returns final when quota-email enqueue throws after commit', async () => {
     const quota = {
       send: vi.fn((pattern: string) =>
         of(
-          pattern === 'quota.check'
+          pattern === QUOTA_CHECK_PATTERN
             ? {
                 allowed: true,
                 quota: {
@@ -431,7 +484,7 @@ describe('DictateService', () => {
       wordCount: 3,
     });
     expect(quota.send).toHaveBeenCalledWith(
-      'quota.commit',
+      QUOTA_COMMIT_PATTERN,
       expect.objectContaining({ wordCount: 3 }),
     );
     expect(outbox.enqueue).toHaveBeenCalledWith(

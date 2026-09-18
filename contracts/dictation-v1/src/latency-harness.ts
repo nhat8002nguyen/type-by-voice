@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
-import type { StartMessage } from './types.js';
+import type { FinalMessage, StartMessage } from './types.js';
 
 export interface StageTimings {
   connectMs: number;
@@ -10,8 +10,13 @@ export interface StageTimings {
   totalMs: number;
 }
 
+export interface HarnessRunResult extends StageTimings {
+  text: string;
+}
+
 export interface HarnessReport {
   runs: number;
+  finals: string[];
   stages: {
     connectMs: { p50: number; p95: number };
     readyMs: { p50: number; p95: number };
@@ -35,7 +40,7 @@ export async function runOnce(options: {
   token: string;
   audio: Uint8Array;
   start: StartMessage;
-}): Promise<StageTimings> {
+}): Promise<HarnessRunResult> {
   const start: StartMessage = { ...options.start, requestId: randomUUID() };
   const t0 = performance.now();
   const ws = new WebSocket(options.url, {
@@ -56,7 +61,7 @@ export async function runOnce(options: {
     ws.send(options.audio);
     const tLastBinary = performance.now();
 
-    const finalPromise = waitForType(ws, 'final');
+    const finalPromise = waitForType<FinalMessage>(ws, 'final');
     ws.send(
       JSON.stringify({
         type: 'stop',
@@ -65,7 +70,7 @@ export async function runOnce(options: {
       }),
     );
     const tStop = performance.now();
-    await finalPromise;
+    const final = await finalPromise;
     const tFinal = performance.now();
 
     return {
@@ -74,6 +79,7 @@ export async function runOnce(options: {
       uploadMs: tLastBinary - tReady,
       finalMs: tFinal - tStop,
       totalMs: tFinal - tOpen,
+      text: final.text,
     };
   } finally {
     ws.close();
@@ -86,21 +92,23 @@ export async function runHarness(options: {
   audio: Uint8Array;
   start: StartMessage;
   runs: number;
+  onRun?: (result: HarnessRunResult) => void;
 }): Promise<HarnessReport> {
-  const timings: StageTimings[] = [];
+  const timings: HarnessRunResult[] = [];
   for (let i = 0; i < options.runs; i++) {
-    timings.push(
-      await runOnce({
-        url: options.url,
-        token: options.token,
-        audio: options.audio,
-        start: options.start,
-      }),
-    );
+    const result = await runOnce({
+      url: options.url,
+      token: options.token,
+      audio: options.audio,
+      start: options.start,
+    });
+    timings.push(result);
+    options.onRun?.(result);
   }
 
   return {
     runs: options.runs,
+    finals: timings.map((timing) => timing.text),
     stages: {
       connectMs: summarize(timings, 'connectMs'),
       readyMs: summarize(timings, 'readyMs'),
@@ -122,7 +130,10 @@ function summarize(
   };
 }
 
-function waitForType(ws: WebSocket, type: string): Promise<void> {
+function waitForType<T extends { type?: string }>(
+  ws: WebSocket,
+  type: string,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       ws.off('message', onMessage);
@@ -133,15 +144,15 @@ function waitForType(ws: WebSocket, type: string): Promise<void> {
       if (isBinary) {
         return;
       }
-      let parsed: { type?: string };
+      let parsed: T;
       try {
-        parsed = JSON.parse(String(data)) as { type?: string };
+        parsed = JSON.parse(String(data)) as T;
       } catch {
         return;
       }
       if (parsed.type === type) {
         cleanup();
-        resolve();
+        resolve(parsed);
       }
     };
     const onError = (err: Error) => {

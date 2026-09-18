@@ -1,124 +1,156 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Type by Voice — backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Nest 12 ESM monorepo. The only public process is `api` on port **3000** (HTTP + WebSocket `/v1/dictate`). Other apps are internal (NATS / RabbitMQ).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Specs: [`docs/superpowers/specs/2026-09-13-backend-design.md`](../docs/superpowers/specs/2026-09-13-backend-design.md), [`docs/superpowers/specs/2026-09-13-dictation-protocol.md`](../docs/superpowers/specs/2026-09-13-dictation-protocol.md).
 
-## Description
+## Run the stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+Needs Docker. Compose builds with Node 24 (`Dockerfile.dev`) and does **not** mount host `node_modules`.
 
 ```bash
-$ npm install
+cd backend
+docker compose up -d
 ```
 
-## Compile and run the project
+Wait until `api` is up, then:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+curl -s http://127.0.0.1:3000/health
 ```
 
-## Run tests
+Expect Terminus JSON with `"status": "ok"` (Postgres ping).
+
+Default speech backend is **fake** (`SPEECH_PROVIDER=fake` in compose). It returns `the transcribed text` and does not need `GROQ_API_KEY`. To use Groq:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+GROQ_API_KEY=... docker compose up -d
 ```
 
-## Deployment
+Set `SPEECH_PROVIDER=groq` on `speech-service` (or just set the key — a non-empty `GROQ_API_KEY` selects Groq). Switch models at deploy with `GROQ_MODEL`:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+- `whisper-large-v3-turbo` (default) — faster
+- `whisper-large-v3` — slightly more accurate
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+GROQ_MODEL=whisper-large-v3 docker compose up -d --force-recreate speech-service
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project:
+Nest Observe is **off** unless both `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` are set. Empty keys caused `Telemetry rejected (401)` in `api` logs. To enable it, create an app at [observe.nestjs.com](https://observe.nestjs.com) and restart compose:
 
 ```bash
-$ npm install @nestjs/observe
+OBSERVE_APP_KEY=... OBSERVE_APP_SECRET=... docker compose up -d
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
+Credentials are read once at process start; change them only with a restart.
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+Stop:
 
-## Resources
+```bash
+docker compose down
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+Unit tests (host Node **≥ 24.9.0**):
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+cd backend
+npm ci
+npm test
+```
 
-## Support
+`npm run test:e2e` is leftover Nest Hello World specs. They boot app modules in-process and are not a product suite. Live dictation uses the harness below.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Manual HTTP
 
-## Stay in touch
+Base URL: `http://127.0.0.1:3000`. Register, login, and refresh **require** client identity:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- `platform`: `macos` | `windows` | `ios` | `android`
+- `clientVersion`: any string (example: `1.0.0+12`)
+- `deviceId`: UUID v4
 
-## License
+Reuse the same `deviceId` for login/refresh of that install. Access JWT TTL is **15 minutes**; send `Authorization: Bearer <accessToken>`.
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Auth routes are limited to **10/min/IP** and **5/min/email** (login). Five consecutive login failures lock the account briefly.
+
+```bash
+IDENTITY='"platform":"macos","clientVersion":"1.0.0+12","deviceId":"9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77"'
+
+# Register — 201 { accessToken, refreshToken, expiresIn }
+curl -s http://127.0.0.1:3000/v1/auth/register \
+  -H 'content-type: application/json' \
+  -d "{\"email\":\"dev@example.com\",\"password\":\"a-long-enough-password\",$IDENTITY}"
+
+# Login — 200, same token shape
+curl -s http://127.0.0.1:3000/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d "{\"email\":\"dev@example.com\",\"password\":\"a-long-enough-password\",$IDENTITY}"
+
+export TOKEN='<accessToken>'
+export REFRESH='<refreshToken>'
+
+# Refresh — 200; rotate refresh. platform + deviceId must match the session
+curl -s http://127.0.0.1:3000/v1/auth/refresh \
+  -H 'content-type: application/json' \
+  -d "{\"refreshToken\":\"$REFRESH\",$IDENTITY}"
+
+# Logout this device — 204
+curl -s -X POST http://127.0.0.1:3000/v1/auth/logout \
+  -H "authorization: Bearer $TOKEN"
+
+# Profile / quota / devices
+curl -s http://127.0.0.1:3000/v1/me -H "authorization: Bearer $TOKEN"
+curl -s http://127.0.0.1:3000/v1/me/quota -H "authorization: Bearer $TOKEN"
+curl -s http://127.0.0.1:3000/v1/me/sessions -H "authorization: Bearer $TOKEN"
+curl -s -X DELETE http://127.0.0.1:3000/v1/me/sessions/<sessionId> \
+  -H "authorization: Bearer $TOKEN"
+
+# Transcripts (empty until a dictation `final` has been persisted)
+curl -s 'http://127.0.0.1:3000/v1/transcripts?limit=20' -H "authorization: Bearer $TOKEN"
+curl -s 'http://127.0.0.1:3000/v1/transcripts?q=hello' -H "authorization: Bearer $TOKEN"
+curl -s http://127.0.0.1:3000/v1/transcripts/<id> -H "authorization: Bearer $TOKEN"
+curl -s http://127.0.0.1:3000/v1/transcripts/export -H "authorization: Bearer $TOKEN"
+curl -s -X DELETE http://127.0.0.1:3000/v1/transcripts/<id> \
+  -H "authorization: Bearer $TOKEN"
+```
+
+Email verification is **not** required to login. Dev mailer logs `{ type, userId, email }` only (no token). `POST /v1/auth/verify-email` and `reset-password` need the token from the `auth_token` row in `api-db` if you want to exercise those paths:
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/v1/auth/forgot-password \
+  -H 'content-type: application/json' \
+  -d '{"email":"dev@example.com"}'
+
+curl -s -X POST http://127.0.0.1:3000/v1/auth/verify-email \
+  -H 'content-type: application/json' \
+  -d '{"token":"<from-db>"}'
+
+curl -s -X POST http://127.0.0.1:3000/v1/auth/reset-password \
+  -H 'content-type: application/json' \
+  -d '{"token":"<from-db>","password":"new-password"}'
+```
+
+Unknown `platform` or a non-UUID-v4 `deviceId` → `400` `{ "code": "invalid_request" }`.
+
+## Manual dictation
+
+Protocol: [`docs/superpowers/specs/2026-09-13-dictation-protocol.md`](../docs/superpowers/specs/2026-09-13-dictation-protocol.md). The contract package drives a live session for you.
+
+1. Compose is up (`api` on `:3000`).
+2. Register or login; copy `accessToken`.
+3. From `contracts/dictation-v1` (host Node ≥ 24.9.0):
+
+```bash
+cd contracts/dictation-v1
+npm ci
+DICTATE_URL=ws://127.0.0.1:3000/v1/dictate \
+DICTATE_TOKEN=<accessToken> \
+HARNESS_RUNS=1 \
+HARNESS_AUDIO=/path/to/speech.ogg \
+npm run harness
+```
+
+Optional: `HARNESS_RUNS` (default 20). `HARNESS_AUDIO` defaults to `audio/speech-1s.ogg`. Each run prints `final.text`; the JSON report includes `finals`. Fake-provider localhost budget: **`totalMs.p95` under 3000 ms**.
+
+Without `DICTATE_URL`, the same script talks to an in-process mock (no backend). See [`contracts/dictation-v1/README.md`](../contracts/dictation-v1/README.md).
+
+WebSocket upgrade uses `Authorization: Bearer <accessToken>`. Failed auth closes **4401**; quota exhausted **4403**; rate limited **4429**.

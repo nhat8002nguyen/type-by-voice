@@ -1,7 +1,11 @@
 import { Controller, Inject } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import type { SpeechProvider } from '@app/speech';
-import { TranscribeRequestDto, TranscribeResponseDto } from '@app/speech';
+import {
+  SPEECH_TRANSCRIBE_PATTERN,
+  TranscribeRequestDto,
+  TranscribeResponseDto,
+} from '@app/speech';
 import { SPEECH_PROVIDER, SpeechService } from './speech.service.js';
 
 @Controller()
@@ -11,7 +15,7 @@ export class SpeechController {
     private readonly speechService: SpeechService,
   ) {}
 
-  @MessagePattern('speech.transcribe')
+  @MessagePattern(SPEECH_TRANSCRIBE_PATTERN)
   async transcribe(
     @Payload() dto: TranscribeRequestDto,
   ): Promise<TranscribeResponseDto> {
@@ -21,7 +25,11 @@ export class SpeechController {
         language: dto.language,
       },
     );
-    this.speechService.logCompleted(dto.requestId, result.providerLatencyMs);
+    this.speechService.logCompleted(
+      dto.requestId,
+      result.providerLatencyMs,
+      this.provider.model,
+    );
     return {
       text: result.text,
       provider: this.provider.name,

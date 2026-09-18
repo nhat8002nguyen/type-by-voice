@@ -3,6 +3,7 @@ import { CLOSE_CODES, loadFixture } from '@type-by-voice/dictation-v1';
 import type { IncomingMessage } from 'node:http';
 import { of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { QUOTA_COMMIT_PATTERN } from '../../../../libs/quota/src/tokens.js';
 import {
   closeCodeForAuthError,
   closeCodeForQuota,
@@ -209,7 +210,7 @@ function createHarness(options?: {
         options?.quotaSend ??
         vi.fn((pattern: string) =>
           of(
-            pattern === 'quota.commit'
+            pattern === QUOTA_COMMIT_PATTERN
               ? { quota: { ...quotaSnapshot, used: 315 } }
               : { allowed: true, quota: quotaSnapshot },
           ),

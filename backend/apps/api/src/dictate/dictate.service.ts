@@ -399,7 +399,7 @@ export class DictateService {
 
   private async enqueueQuotaEmail(quota: QuotaSnapshot): Promise<void> {
     const email = this.#user.email;
-    if (!email) {
+    if (!email || quota.limit == null) {
       return;
     }
     const remaining = quota.limit - quota.used;

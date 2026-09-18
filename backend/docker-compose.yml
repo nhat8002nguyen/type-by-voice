@@ -22,6 +22,8 @@ services:
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
+      - OBSERVE_APP_KEY=${OBSERVE_APP_KEY:-}
+      - OBSERVE_APP_SECRET=${OBSERVE_APP_SECRET:-}
       - "NODE_OPTIONS=--experimental-strip-types --import /usr/src/contracts/dictation-v1/ts-resolve.ts"
     volumes:
       - ./libs:/usr/src/app/libs
@@ -58,6 +60,8 @@ services:
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
+      - OBSERVE_APP_KEY=${OBSERVE_APP_KEY:-}
+      - OBSERVE_APP_SECRET=${OBSERVE_APP_SECRET:-}
     volumes:
       - ./libs:/usr/src/app/libs
       - ./package.json:/usr/src/app/package.json
@@ -82,8 +86,11 @@ services:
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
-      - SPEECH_PROVIDER=fake
+      - SPEECH_PROVIDER=${SPEECH_PROVIDER:-fake}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-whisper-large-v3-turbo}
+      - OBSERVE_APP_KEY=${OBSERVE_APP_KEY:-}
+      - OBSERVE_APP_SECRET=${OBSERVE_APP_SECRET:-}
     volumes:
       - ./libs:/usr/src/app/libs
       - ./package.json:/usr/src/app/package.json
@@ -108,6 +115,8 @@ services:
       - REDIS_HOST=redis
       # local/dev AES-256 key: 32 bytes of 0x07 as 64 hex chars
       - TRANSCRIPT_ENCRYPTION_KEY=0707070707070707070707070707070707070707070707070707070707070707
+      - OBSERVE_APP_KEY=${OBSERVE_APP_KEY:-}
+      - OBSERVE_APP_SECRET=${OBSERVE_APP_SECRET:-}
     volumes:
       - ./libs:/usr/src/app/libs
       - ./package.json:/usr/src/app/package.json
@@ -139,6 +148,8 @@ services:
       - NATS_SERVER_HOST=nats-server
       - RABBITMQ_HOST=amqp://rabbitmq:5672
       - REDIS_HOST=redis
+      - OBSERVE_APP_KEY=${OBSERVE_APP_KEY:-}
+      - OBSERVE_APP_SECRET=${OBSERVE_APP_SECRET:-}
     volumes:
       - ./libs:/usr/src/app/libs
       - ./package.json:/usr/src/app/package.json

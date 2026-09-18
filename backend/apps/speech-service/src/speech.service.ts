@@ -6,9 +6,14 @@ export const SPEECH_PROVIDER = Symbol('SPEECH_PROVIDER');
 export class SpeechService {
   private readonly logger = new Logger(SpeechService.name);
 
-  logCompleted(requestId: string, providerLatencyMs: number): void {
+  logCompleted(
+    requestId: string,
+    providerLatencyMs: number,
+    model?: string,
+  ): void {
+    const modelPart = model ? ` model=${model}` : '';
     this.logger.log(
-      `requestId=${requestId} providerLatencyMs=${providerLatencyMs}`,
+      `requestId=${requestId}${modelPart} providerLatencyMs=${providerLatencyMs}`,
     );
   }
 }

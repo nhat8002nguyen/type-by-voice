@@ -1,4 +1,5 @@
 import { Inbox, InboxService } from '@app/inbox';
+import { isObserveEnabled } from '@app/tracing';
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -11,11 +12,15 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
-    ObserveModule.forRoot({
-      appKey: process.env.OBSERVE_APP_KEY ?? '',
-      appSecret: process.env.OBSERVE_APP_SECRET ?? '',
-      serviceId: 'notifications-service',
-    }),
+    ...(isObserveEnabled()
+      ? [
+          ObserveModule.forRoot({
+            appKey: process.env.OBSERVE_APP_KEY ?? '',
+            appSecret: process.env.OBSERVE_APP_SECRET ?? '',
+            serviceId: 'notifications-service',
+          }),
+        ]
+      : []),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.POSTGRES_HOST ?? 'notifications-db',

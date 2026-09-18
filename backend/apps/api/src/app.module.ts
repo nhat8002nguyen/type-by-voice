@@ -1,7 +1,7 @@
 import { NOTIFICATIONS_SERVICE } from '@app/notifications';
 import { OutboxModule } from '@app/outbox';
 import { WORKFLOWS_SERVICE } from '@app/workflows';
-import { RmqClientModule } from '@app/tracing';
+import { isObserveEnabled, RmqClientModule } from '@app/tracing';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { createObserveModule } from '@nestjs/observe';
@@ -19,11 +19,15 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
-    ObserveModule.forRoot({
-      appKey: process.env.OBSERVE_APP_KEY ?? '',
-      appSecret: process.env.OBSERVE_APP_SECRET ?? '',
-      serviceId: 'api',
-    }),
+    ...(isObserveEnabled()
+      ? [
+          ObserveModule.forRoot({
+            appKey: process.env.OBSERVE_APP_KEY ?? '',
+            appSecret: process.env.OBSERVE_APP_SECRET ?? '',
+            serviceId: 'api',
+          }),
+        ]
+      : []),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.POSTGRES_HOST ?? 'api-db',

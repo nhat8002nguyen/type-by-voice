@@ -8,7 +8,7 @@ import {
   Optional,
   OnModuleDestroy,
 } from '@nestjs/common';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 export const REDIS_CLIENT = Symbol('REDIS_CLIENT');
 

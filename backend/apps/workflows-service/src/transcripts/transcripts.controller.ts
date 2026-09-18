@@ -1,5 +1,13 @@
 import { InboxService } from '@app/inbox';
-import { CreateTranscriptDto, WORKFLOWS_CREATE_EVENT } from '@app/workflows';
+import {
+  CreateTranscriptDto,
+  TRANSCRIPTS_DELETE_PATTERN,
+  TRANSCRIPTS_EXPORT_PATTERN,
+  TRANSCRIPTS_GET_PATTERN,
+  TRANSCRIPTS_LIST_PATTERN,
+  TRANSCRIPTS_SEARCH_PATTERN,
+  WORKFLOWS_CREATE_EVENT,
+} from '@app/workflows';
 import { Controller, Logger } from '@nestjs/common';
 import {
   Ctx,
@@ -89,7 +97,7 @@ export class TranscriptsController {
     channel.ack(originalMessage);
   }
 
-  @MessagePattern('transcripts.list')
+  @MessagePattern(TRANSCRIPTS_LIST_PATTERN)
   list(@Payload() dto: TranscriptsListDto) {
     return this.transcriptsService.list(dto.userId, {
       cursor: dto.cursor,
@@ -97,17 +105,17 @@ export class TranscriptsController {
     });
   }
 
-  @MessagePattern('transcripts.get')
+  @MessagePattern(TRANSCRIPTS_GET_PATTERN)
   get(@Payload() dto: TranscriptsGetDto) {
     return this.transcriptsService.get(dto.userId, dto.id);
   }
 
-  @MessagePattern('transcripts.delete')
+  @MessagePattern(TRANSCRIPTS_DELETE_PATTERN)
   delete(@Payload() dto: TranscriptsGetDto) {
     return this.transcriptsService.delete(dto.userId, dto.id);
   }
 
-  @MessagePattern('transcripts.search')
+  @MessagePattern(TRANSCRIPTS_SEARCH_PATTERN)
   search(@Payload() dto: TranscriptsSearchDto) {
     return this.transcriptsService.search(dto.userId, dto.q, {
       cursor: dto.cursor,
@@ -115,7 +123,7 @@ export class TranscriptsController {
     });
   }
 
-  @MessagePattern('transcripts.export')
+  @MessagePattern(TRANSCRIPTS_EXPORT_PATTERN)
   export(@Payload() dto: TranscriptsUserDto) {
     return this.transcriptsService.export(dto.userId);
   }

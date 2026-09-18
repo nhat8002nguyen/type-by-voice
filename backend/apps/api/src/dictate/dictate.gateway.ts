@@ -386,7 +386,10 @@ function toBuffer(data: SocketData): Buffer {
   if (Array.isArray(data)) {
     return Buffer.concat(data);
   }
-  return Buffer.from(data);
+  if (typeof data === 'string') {
+    return Buffer.from(data);
+  }
+  return Buffer.from(new Uint8Array(data));
 }
 
 function peekRequestId(data: SocketData): string | undefined {

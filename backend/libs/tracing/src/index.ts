@@ -1,3 +1,4 @@
+export * from './is-observe-enabled.js';
 export * from './clients/nats-client.module.js';
 export * from './clients/nats-client.proxy.js';
 export * from './clients/rmq-client.module.js';

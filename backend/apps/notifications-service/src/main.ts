@@ -1,3 +1,4 @@
+import { isObserveEnabled } from '@app/tracing';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import {
@@ -6,9 +7,10 @@ import {
 } from './notifications-service.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(NotificationsServiceModule, {
-    instrument: ObserveInstrument,
-  });
+  const app = await NestFactory.create(
+    NotificationsServiceModule,
+    isObserveEnabled() ? { instrument: ObserveInstrument } : {},
+  );
   app.connectMicroservice<MicroserviceOptions>(
     {
       transport: Transport.RMQ,

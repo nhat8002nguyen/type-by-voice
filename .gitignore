@@ -4,5 +4,6 @@ dist/
 .worktrees/
 .env
 .env.*
+!.env.example
 *.log
 nestjs-microservices/

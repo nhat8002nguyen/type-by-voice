@@ -1,3 +1,4 @@
+import { isObserveEnabled } from '@app/tracing';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import {
@@ -11,9 +12,10 @@ function natsServerUrl(): string {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(SpeechServiceModule, {
-    instrument: ObserveInstrument,
-  });
+  const app = await NestFactory.create(
+    SpeechServiceModule,
+    isObserveEnabled() ? { instrument: ObserveInstrument } : {},
+  );
   app.connectMicroservice<MicroserviceOptions>(
     {
       transport: Transport.NATS,

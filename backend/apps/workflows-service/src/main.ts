@@ -1,3 +1,4 @@
+import { isObserveEnabled } from '@app/tracing';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
@@ -12,9 +13,10 @@ function natsServerUrl(): string {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(WorkflowsServiceModule, {
-    instrument: ObserveInstrument,
-  });
+  const app = await NestFactory.create(
+    WorkflowsServiceModule,
+    isObserveEnabled() ? { instrument: ObserveInstrument } : {},
+  );
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.connectMicroservice<MicroserviceOptions>(
     {

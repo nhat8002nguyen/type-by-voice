@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { SpeechServiceController } from './speech-service.controller.js';
 import { SpeechServiceService } from './speech-service.service.js';
 

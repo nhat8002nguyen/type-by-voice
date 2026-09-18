@@ -29,7 +29,7 @@ export class NotificationsController {
 
     if (!messageId) {
       this.logger.error(
-        'Missing messageId on notifications.email; acking without send',
+        `Missing messageId on ${NOTIFICATIONS_EMAIL_EVENT}; acking without send`,
       );
       channel.ack(originalMessage);
       return;

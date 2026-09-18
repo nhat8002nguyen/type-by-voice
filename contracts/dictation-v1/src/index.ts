@@ -18,5 +18,10 @@ export {
   runOnce,
   runHarness,
   type StageTimings,
+  type HarnessRunResult,
   type HarnessReport,
 } from './latency-harness.js';
+export {
+  formatFinalLine,
+  resolveHarnessAudioPath,
+} from './harness-config.js';

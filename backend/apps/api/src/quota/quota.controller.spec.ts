@@ -4,13 +4,16 @@ import { Test } from '@nestjs/testing';
 import { of } from 'rxjs';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { QUOTA_SERVICE } from '../../../../libs/quota/src/tokens.js';
+import {
+  QUOTA_CHECK_PATTERN,
+  QUOTA_SERVICE,
+} from '../../../../libs/quota/src/tokens.js';
 import { AccessAuthGuard } from '../auth/access-auth.guard.js';
 import { AuthService } from '../auth/auth.service.js';
 import { MeQuotaController } from './quota.controller.js';
 
 function sendProxy(send: ReturnType<typeof vi.fn>) {
-  return { send };
+  return { send } as never;
 }
 
 describe('MeQuotaController', () => {
@@ -67,7 +70,7 @@ describe('MeQuotaController', () => {
       clientVersion: '1.0.0+12',
       deviceId: '9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77',
     });
-    expect(send).toHaveBeenCalledWith('quota.check', {
+    expect(send).toHaveBeenCalledWith(QUOTA_CHECK_PATTERN, {
       userId: 'user-1',
       sessionId: 's',
       platform: 'macos',

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { SpeechProvider } from '@app/speech';
 
 export function createSpeechProvider(
@@ -7,7 +7,10 @@ export function createSpeechProvider(
   const apiKey = env.GROQ_API_KEY;
   const requested = env.SPEECH_PROVIDER ?? 'fake';
   if (apiKey) {
-    return new GroqSpeechProvider({ apiKey });
+    return new GroqSpeechProvider({
+      apiKey,
+      model: env.GROQ_MODEL,
+    });
   }
   if (requested === 'groq' || env.NODE_ENV === 'production') {
     throw new Error(
@@ -30,7 +33,12 @@ export class FakeSpeechProvider implements SpeechProvider {
 
 const GROQ_TRANSCRIPTIONS_URL =
   'https://api.groq.com/openai/v1/audio/transcriptions';
-const GROQ_MODEL = 'whisper-large-v3-turbo';
+const DEFAULT_GROQ_MODEL = 'whisper-large-v3-turbo';
+
+export function resolveGroqModel(env: NodeJS.Dict<string> = process.env): string {
+  const custom = env.GROQ_MODEL?.trim();
+  return custom ? custom : DEFAULT_GROQ_MODEL;
+}
 
 export class ProviderUnavailableError extends Error {
   constructor(message = 'Speech provider unavailable', options?: ErrorOptions) {
@@ -46,19 +54,24 @@ export type GroqFetch = (
 
 export type GroqSpeechProviderOptions = {
   apiKey: string;
+  model?: string;
   fetch?: GroqFetch;
 };
 
 @Injectable()
 export class GroqSpeechProvider implements SpeechProvider {
   readonly name = 'groq-whisper';
+  readonly model: string;
 
+  private readonly logger = new Logger(GroqSpeechProvider.name);
   private readonly apiKey: string;
   private readonly fetchFn: GroqFetch;
 
   constructor(options: GroqSpeechProviderOptions) {
     this.apiKey = options.apiKey;
+    this.model = resolveGroqModel({ GROQ_MODEL: options.model });
     this.fetchFn = options.fetch ?? ((input, init) => fetch(input, init));
+    this.logger.log(`whisper model=${this.model}`);
   }
 
   async transcribe(
@@ -66,7 +79,7 @@ export class GroqSpeechProvider implements SpeechProvider {
     opts: { language: string },
   ): Promise<{ text: string; providerLatencyMs: number }> {
     const body = new FormData();
-    body.append('model', GROQ_MODEL);
+    body.append('model', this.model);
     body.append('language', opts.language);
     body.append(
       'file',

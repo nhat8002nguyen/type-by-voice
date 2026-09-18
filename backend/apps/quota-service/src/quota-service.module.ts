@@ -1,3 +1,4 @@
+import { isObserveEnabled } from '@app/tracing';
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
 import { QuotaController } from './quota.controller.js';
@@ -8,13 +9,15 @@ import { QuotaService } from './quota.service.js';
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
-  imports: [
-    ObserveModule.forRoot({
-      appKey: process.env.OBSERVE_APP_KEY ?? '',
-      appSecret: process.env.OBSERVE_APP_SECRET ?? '',
-      serviceId: 'quota-service',
-    }),
-  ],
+  imports: isObserveEnabled()
+    ? [
+        ObserveModule.forRoot({
+          appKey: process.env.OBSERVE_APP_KEY ?? '',
+          appSecret: process.env.OBSERVE_APP_SECRET ?? '',
+          serviceId: 'quota-service',
+        }),
+      ]
+    : [],
   controllers: [QuotaServiceController, QuotaController],
   providers: [QuotaServiceService, QuotaService],
   exports: [QuotaService],

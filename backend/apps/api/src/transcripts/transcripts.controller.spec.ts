@@ -6,7 +6,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { AccessAuthGuard } from '../auth/access-auth.guard.js';
 import { AuthService } from '../auth/auth.service.js';
-import { WORKFLOWS_SERVICE } from '../../../../libs/workflows/src/tokens.js';
+import {
+  TRANSCRIPTS_DELETE_PATTERN,
+  TRANSCRIPTS_EXPORT_PATTERN,
+  TRANSCRIPTS_GET_PATTERN,
+  TRANSCRIPTS_LIST_PATTERN,
+  TRANSCRIPTS_SEARCH_PATTERN,
+  WORKFLOWS_SERVICE,
+} from '../../../../libs/workflows/src/tokens.js';
 import { TranscriptsController } from './transcripts.controller.js';
 
 describe('TranscriptsController', () => {
@@ -33,7 +40,7 @@ describe('TranscriptsController', () => {
       { userId: 'user-1' },
       { q: 'hello', cursor: 'c1', limit: 5 },
     );
-    expect(send).toHaveBeenCalledWith('transcripts.search', {
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_SEARCH_PATTERN, {
       userId: 'user-1',
       q: 'hello',
       cursor: 'c1',
@@ -46,7 +53,7 @@ describe('TranscriptsController', () => {
     const send = vi.fn().mockReturnValue(of({ items: [], nextCursor: undefined }));
     const module = await compile(send);
     const result = await module.get(TranscriptsController).list({ userId: 'user-1' }, {});
-    expect(send).toHaveBeenCalledWith('transcripts.list', {
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_LIST_PATTERN, {
       userId: 'user-1',
       limit: 20,
     });
@@ -60,7 +67,7 @@ describe('TranscriptsController', () => {
       { userId: 'user-1' },
       { cursor: 'c1', limit: 5 },
     );
-    expect(send).toHaveBeenCalledWith('transcripts.list', {
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_LIST_PATTERN, {
       userId: 'user-1',
       cursor: 'c1',
       limit: 5,
@@ -94,7 +101,7 @@ describe('TranscriptsController', () => {
     const send = vi.fn().mockReturnValue(of(item));
     const module = await compile(send);
     const result = await module.get(TranscriptsController).get({ userId: 'user-1' }, 't1');
-    expect(send).toHaveBeenCalledWith('transcripts.get', {
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_GET_PATTERN, {
       userId: 'user-1',
       id: 't1',
     });
@@ -113,7 +120,7 @@ describe('TranscriptsController', () => {
     const send = vi.fn().mockReturnValue(of(undefined));
     const module = await compile(send);
     await module.get(TranscriptsController).delete({ userId: 'user-1' }, 't1');
-    expect(send).toHaveBeenCalledWith('transcripts.delete', {
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_DELETE_PATTERN, {
       userId: 'user-1',
       id: 't1',
     });
@@ -132,7 +139,7 @@ describe('TranscriptsController', () => {
     const send = vi.fn().mockReturnValue(of(items));
     const module = await compile(send);
     const result = await module.get(TranscriptsController).export({ userId: 'user-1' });
-    expect(send).toHaveBeenCalledWith('transcripts.export', { userId: 'user-1' });
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_EXPORT_PATTERN, { userId: 'user-1' });
     expect(result).toEqual(items);
   });
 });
@@ -173,7 +180,7 @@ describe('Transcripts HTTP', () => {
     const { send } = await createApp(vi.fn().mockReturnValue(of({ items: [] })));
     const response = await request(app.getHttpServer()).get('/v1/transcripts?q=hello');
     expect(response.status).toBe(200);
-    expect(send).toHaveBeenCalledWith('transcripts.search', {
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_SEARCH_PATTERN, {
       userId: 'user-1',
       q: 'hello',
       limit: 20,
@@ -199,7 +206,7 @@ describe('Transcripts HTTP', () => {
     const response = await request(app.getHttpServer()).get('/v1/transcripts/export');
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toMatch(/application\/json/);
-    expect(send).toHaveBeenCalledWith('transcripts.export', { userId: 'user-1' });
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_EXPORT_PATTERN, { userId: 'user-1' });
     expect(response.body).toEqual(items);
   });
 });

@@ -33,4 +33,31 @@ describe('runHarness', () => {
     expect(report.stages.totalMs.p95).toBeGreaterThanOrEqual(report.stages.totalMs.p50);
     await server.close();
   });
+
+  it('collects final.text from each run and notifies onRun', async () => {
+    const server = await startMockDictateServer({
+      port: 0,
+      transcript: 'hello from groq',
+    });
+    const audio = new Uint8Array(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../audio/speech-1s.ogg')),
+    );
+    const seen: string[] = [];
+    try {
+      const report = await runHarness({
+        url: server.url,
+        token: 'test-token',
+        audio,
+        start: loadFixture<StartMessage>('start.valid.json'),
+        runs: 2,
+        onRun: (result) => {
+          seen.push(result.text);
+        },
+      });
+      expect(report.finals).toEqual(['hello from groq', 'hello from groq']);
+      expect(seen).toEqual(['hello from groq', 'hello from groq']);
+    } finally {
+      await server.close();
+    }
+  });
 });

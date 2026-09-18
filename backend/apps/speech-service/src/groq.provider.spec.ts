@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -36,6 +37,24 @@ describe('GroqSpeechProvider', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe(
       'Bearer gsk_test',
     );
+    expect((init.body as FormData).get('model')).toBe(
+      'whisper-large-v3-turbo',
+    );
+  });
+
+  it('sends GROQ_MODEL when the constructor is given a model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: 'ok' }),
+    });
+    const provider = new GroqSpeechProvider({
+      apiKey: 'gsk_test',
+      model: 'whisper-large-v3',
+      fetch: fetchMock,
+    });
+    await provider.transcribe(Buffer.from('OggS'), { language: 'en' });
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect((init.body as FormData).get('model')).toBe('whisper-large-v3');
   });
 
   it('fake provider returns the transcribed text without Groq', async () => {
@@ -58,6 +77,39 @@ describe('GroqSpeechProvider', () => {
       GROQ_API_KEY: 'gsk_test',
     });
     expect(provider).toBeInstanceOf(GroqSpeechProvider);
+    expect((provider as GroqSpeechProvider).model).toBe(
+      'whisper-large-v3-turbo',
+    );
+  });
+
+  it('uses GROQ_MODEL when selecting groq', () => {
+    const provider = createSpeechProvider({
+      GROQ_API_KEY: 'gsk_test',
+      GROQ_MODEL: 'whisper-large-v3',
+    });
+    expect((provider as GroqSpeechProvider).model).toBe('whisper-large-v3');
+  });
+
+  it('logs the whisper model when constructed', () => {
+    const spy = vi
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    new GroqSpeechProvider({
+      apiKey: 'gsk_test',
+      model: 'whisper-large-v3',
+    });
+    expect(spy).toHaveBeenCalledWith('whisper model=whisper-large-v3');
+    spy.mockRestore();
+  });
+
+  it('ignores a blank GROQ_MODEL', () => {
+    const provider = createSpeechProvider({
+      GROQ_API_KEY: 'gsk_test',
+      GROQ_MODEL: '   ',
+    });
+    expect((provider as GroqSpeechProvider).model).toBe(
+      'whisper-large-v3-turbo',
+    );
   });
 
   it('selects groq when SPEECH_PROVIDER is groq and key is present', () => {
