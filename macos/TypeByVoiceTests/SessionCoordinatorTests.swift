@@ -197,6 +197,45 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(seen, [readyQuota, finalQuota])
     }
 
+    func testEveryErrorCodeSurfacesRetryableFlag() {
+        let codes: [(String, Bool)] = [
+            ("unauthenticated", false),
+            ("quota_exceeded", false),
+            ("audio_cap_exceeded", false),
+            ("too_long", false),
+            ("invalid_request", false),
+            ("rate_limited", true),
+            ("provider_unavailable", true),
+            ("internal", true),
+            ("session_timeout", true),
+        ]
+        for (code, retryable) in codes {
+            let engine = FakeTranscriptionEngine()
+            let coordinator = makeConnecting(engine: engine)
+            engine.emitError(code: code, message: code, retryable: retryable)
+            XCTAssertEqual(coordinator.lastError?.retryable, retryable, code)
+            XCTAssertEqual(coordinator.lastError?.code, code)
+            XCTAssertEqual(coordinator.state, .idle)
+        }
+    }
+
+    func testConnectingTimeoutIsRetryable() {
+        let clock = Clock(now: Date(timeIntervalSince1970: 0))
+        let coordinator = SessionCoordinator(engine: FakeTranscriptionEngine(), inserter: FakeInserter(), clock: clock)
+        coordinator.hotkeyPressed()
+        clock.now = Date(timeIntervalSince1970: 5.1)
+        coordinator.tick(now: clock.now)
+        XCTAssertEqual(coordinator.lastError?.code, "session_timeout")
+        XCTAssertEqual(coordinator.lastError?.retryable, true)
+    }
+
+    private func makeConnecting(engine: FakeTranscriptionEngine) -> SessionCoordinator {
+        let coordinator = SessionCoordinator(engine: engine, inserter: FakeInserter(), clock: Clock())
+        coordinator.hotkeyPressed()
+        XCTAssertEqual(coordinator.state, .connecting)
+        return coordinator
+    }
+
     private func makeRecording(
         engine: FakeTranscriptionEngine,
         inserter: TextInserter = FakeInserter(),

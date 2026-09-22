@@ -243,7 +243,7 @@ final class AppModel: ObservableObject {
                     quota: lastQuota,
                     error: OverlayError(
                         message: message,
-                        retryable: error.code != "unauthenticated" && error.code != "quota_exceeded"
+                        retryable: error.retryable
                     )
                 )
                 return

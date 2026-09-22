@@ -11,6 +11,7 @@ enum SessionState: Equatable {
 struct SessionError: Equatable {
     var code: String
     var message: String
+    var retryable: Bool
 }
 
 struct SessionTimeouts: Equatable {

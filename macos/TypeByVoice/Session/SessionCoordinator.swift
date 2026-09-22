@@ -110,7 +110,7 @@ final class SessionCoordinator {
         case .connecting:
             if let started = connectingStartedAt,
                now.timeIntervalSince(started) >= timeouts.connecting {
-                failToIdle(code: "session_timeout", message: "Connecting timed out")
+                failToIdle(code: "session_timeout", message: "Connecting timed out", retryable: true)
             }
         case .recording:
             if let started = recordingStartedAt,
@@ -120,12 +120,12 @@ final class SessionCoordinator {
         case .transcribing:
             if let started = transcribingStartedAt,
                now.timeIntervalSince(started) >= timeouts.transcribing {
-                failToIdle(code: "session_timeout", message: "Transcription timed out")
+                failToIdle(code: "session_timeout", message: "Transcription timed out", retryable: true)
             }
         case .inserting:
             if let started = insertingStartedAt,
                now.timeIntervalSince(started) >= timeouts.inserting {
-                failToIdle(code: "session_timeout", message: "Insert timed out")
+                failToIdle(code: "session_timeout", message: "Insert timed out", retryable: true)
             }
         case .idle:
             break
@@ -155,7 +155,11 @@ final class SessionCoordinator {
             do {
                 try await self.engine.start(requestId: requestId, identity: clientIdentity)
             } catch {
-                self.failToIdle(code: "engine_start_failed", message: error.localizedDescription)
+                self.failToIdle(
+                    code: "engine_start_failed",
+                    message: error.localizedDescription,
+                    retryable: true
+                )
             }
         }
     }
@@ -271,8 +275,8 @@ final class SessionCoordinator {
         transition(to: .idle)
     }
 
-    private func failToIdle(code: String, message: String) {
-        lastError = SessionError(code: code, message: message)
+    private func failToIdle(code: String, message: String, retryable: Bool) {
+        lastError = SessionError(code: code, message: message, retryable: retryable)
         audioCapture.stopCapture()
         preReadyAudio = []
         heldSilencePages = []
@@ -312,8 +316,8 @@ final class SessionCoordinator {
                     self.transition(to: .idle)
                 }
             }
-        case let .error(code, message, _, _):
-            failToIdle(code: code, message: message)
+        case let .error(code, message, retryable, _):
+            failToIdle(code: code, message: message, retryable: retryable)
         }
     }
 

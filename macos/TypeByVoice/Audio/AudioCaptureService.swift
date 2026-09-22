@@ -21,6 +21,11 @@ final class AudioCaptureService: AudioCaptureStarting {
 
     func prepareEngine() {
         guard !isPrepared else { return }
+        // Avoid HAL / securityd hangs when the XCTest host launches the app bundle.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            isPrepared = true
+            return
+        }
         let engine = AVAudioEngine()
         self.engine = engine
         _ = engine.inputNode
