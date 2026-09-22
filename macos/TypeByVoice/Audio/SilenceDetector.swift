@@ -33,6 +33,18 @@ struct SilenceDetector {
         terminalEventEmitted = false
     }
 
+    /// Calibrated speech gate: `noiseFloor * 2.5`. `nil` until calibration finishes.
+    var speechRMSThreshold: Float? {
+        guard let noiseFloor else { return nil }
+        return noiseFloor * 2.5
+    }
+
+    /// Same speech test used by `process` after calibration. Before calibration, not speech.
+    func isSpeech(_ samples: [Float]) -> Bool {
+        guard let threshold = speechRMSThreshold else { return false }
+        return Self.rms(of: samples) > threshold
+    }
+
     mutating func process(samples: [Float], sampleRate: Int) -> Event? {
         guard !terminalEventEmitted, sampleRate > 0 else { return nil }
 
@@ -59,8 +71,7 @@ struct SilenceDetector {
                 continue
             }
 
-            let floor = noiseFloor!
-            let isSpeech = rms > floor * 2.5
+            let isSpeech = rms > (speechRMSThreshold ?? 0)
 
             if isSpeech {
                 consecutiveSilentMs = 0

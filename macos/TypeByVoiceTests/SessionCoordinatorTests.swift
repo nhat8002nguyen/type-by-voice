@@ -112,6 +112,8 @@ final class SessionCoordinatorTests: XCTestCase {
         let clock = Clock(now: Date(timeIntervalSince1970: 0))
         let coordinator = makeRecording(engine: engine, clock: clock)
 
+        let noise = [Float](repeating: 0.001, count: 1600 * 3)
+        coordinator.micFrame(samples: noise)
         let speech = (0..<3200).map { Float(sin(Float($0) / 8)) * 0.4 }
         coordinator.micFrame(samples: speech)
         let bytesAfterSpeech = engine.flushedBytes
@@ -124,6 +126,32 @@ final class SessionCoordinatorTests: XCTestCase {
         coordinator.hotkeyPressed()
         XCTAssertEqual(coordinator.state, .transcribing)
 
+        let hangoverBytes = engine.flushedBytes - bytesAfterSpeech
+        XCTAssertGreaterThan(hangoverBytes, 0)
+        XCTAssertLessThan(hangoverBytes, bytesAfterSpeech)
+    }
+
+    /// Soft speech above floor×2.5 but below the old fixed 0.02 RMS must flush, not hold as silence.
+    func testTrailingSilenceUsesDetectorSpeechThreshold() async {
+        let engine = FakeTranscriptionEngine()
+        let clock = Clock(now: Date(timeIntervalSince1970: 0))
+        let coordinator = makeRecording(engine: engine, clock: clock)
+
+        let noise = [Float](repeating: 0.001, count: 1600 * 3)
+        coordinator.micFrame(samples: noise)
+        let afterCalibration = engine.flushedBytes
+
+        let softSpeech = [Float](repeating: 0.01, count: 3200)
+        coordinator.micFrame(samples: softSpeech)
+        XCTAssertGreaterThan(engine.flushedBytes, afterCalibration)
+
+        let bytesAfterSpeech = engine.flushedBytes
+        let quiet = [Float](repeating: 0.001, count: 16_000)
+        coordinator.micFrame(samples: quiet)
+        XCTAssertEqual(engine.flushedBytes, bytesAfterSpeech)
+
+        clock.now = clock.now.addingTimeInterval(0.5)
+        coordinator.hotkeyPressed()
         let hangoverBytes = engine.flushedBytes - bytesAfterSpeech
         XCTAssertGreaterThan(hangoverBytes, 0)
         XCTAssertLessThan(hangoverBytes, bytesAfterSpeech)

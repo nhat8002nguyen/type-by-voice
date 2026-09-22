@@ -25,11 +25,9 @@ final class SessionCoordinator {
     private var recordingStartedAt: Date?
     private var transcribingStartedAt: Date?
     private var insertingStartedAt: Date?
-    private var speechSeen = false
     private var eventLoopStarted = false
 
     private static let sampleRate = 16_000
-    private static let speechRMSThreshold: Float = 0.02
 
     init(
         engine: TranscriptionEngine,
@@ -90,7 +88,7 @@ final class SessionCoordinator {
         }
 
         let pages = encoder.encode(samples: samples)
-        let isSilent = Self.rms(of: samples) < Self.speechRMSThreshold
+        let isSilent = !silenceDetector.isSpeech(samples)
         let frameDurationMs = samples.isEmpty
             ? 0
             : max(1, samples.count * 1_000 / Self.sampleRate)
@@ -142,7 +140,6 @@ final class SessionCoordinator {
         recordingStartedAt = nil
         transcribingStartedAt = nil
         insertingStartedAt = nil
-        speechSeen = false
         silenceDetector.reset()
         encoder.reset()
         audioCapture.startCapture()
@@ -165,7 +162,6 @@ final class SessionCoordinator {
         guard state == .connecting, hasMicFrames, hasReady else { return }
         recordingStartedAt = clock.now
         silenceDetector.reset()
-        speechSeen = false
         transition(to: .recording)
         flushPreReadyAudio()
     }
@@ -221,7 +217,7 @@ final class SessionCoordinator {
         guard let event else { return }
         switch event {
         case .speechStarted:
-            speechSeen = true
+            break
         case .silenceReached:
             requestStopFromRecording()
         case .noSpeech:
@@ -267,7 +263,6 @@ final class SessionCoordinator {
         recordingStartedAt = nil
         transcribingStartedAt = nil
         insertingStartedAt = nil
-        speechSeen = false
         Task { @MainActor [weak self] in
             await self?.engine.cancel()
         }
@@ -285,7 +280,6 @@ final class SessionCoordinator {
         recordingStartedAt = nil
         transcribingStartedAt = nil
         insertingStartedAt = nil
-        speechSeen = false
         Task { @MainActor [weak self] in
             await self?.engine.cancel()
         }
@@ -333,14 +327,5 @@ final class SessionCoordinator {
     private func transition(to newState: SessionState) {
         state = newState
         onStateChange?(newState)
-    }
-
-    private static func rms(of samples: [Float]) -> Float {
-        guard !samples.isEmpty else { return 0 }
-        var sumSquares: Float = 0
-        for sample in samples {
-            sumSquares += sample * sample
-        }
-        return sqrt(sumSquares / Float(samples.count))
     }
 }
