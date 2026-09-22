@@ -88,6 +88,67 @@ describe('DictateService', () => {
     );
   });
 
+  it('enqueues workflows.create with listInHistory from start', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === QUOTA_CHECK_PATTERN
+            ? {
+                allowed: true,
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 312,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              }
+            : {
+                quota: {
+                  unit: 'words',
+                  limit: 2000,
+                  used: 315,
+                  resetAt: '2026-09-18T04:12:00Z',
+                },
+              },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
+    };
+    const outbox = outboxStub();
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outbox as never,
+      jwtUser(),
+    );
+    const start = {
+      ...loadFixture<StartMessage>('start.valid.json'),
+      listInHistory: false,
+    };
+    await service.onText(start);
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('stop.valid.json'));
+    expect(outbox.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'workflows.create',
+        payload: expect.objectContaining({
+          userId: '11111111-1111-4111-8111-111111111111',
+          requestId: '3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f',
+          text: 'the transcribed text',
+          listInHistory: false,
+        }),
+      }),
+    );
+  });
+
   it('cancel never calls speech or quota commit', async () => {
     const speech = { send: vi.fn() };
     const quota = {

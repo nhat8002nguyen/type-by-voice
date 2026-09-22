@@ -1,4 +1,4 @@
-import { IsInt, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsInt, IsString, IsUUID } from 'class-validator';
 
 export class CreateTranscriptDto {
   @IsUUID('4')
@@ -15,4 +15,7 @@ export class CreateTranscriptDto {
 
   @IsInt()
   audioMs: number;
+
+  @IsBoolean()
+  listInHistory: boolean;
 }

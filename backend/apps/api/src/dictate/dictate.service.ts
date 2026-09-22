@@ -306,6 +306,7 @@ export class DictateService {
   private async transcribeAndFinalize(output: {
     requestId: string;
     audio: Uint8Array;
+    listInHistory: boolean;
   }): Promise<ServerTextMessage | undefined> {
     const session = this.#session;
     if (session === undefined) {
@@ -362,6 +363,7 @@ export class DictateService {
       text: result.text,
       wordCount,
       audioMs,
+      listInHistory: output.listInHistory,
     };
     try {
       await this.#outbox.enqueue({
