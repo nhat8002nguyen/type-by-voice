@@ -93,6 +93,7 @@ export class TranscriptsController {
         requestId: dto.requestId,
         wordCount: dto.wordCount,
         audioMs: dto.audioMs,
+        listInHistory: dto.listInHistory ?? true,
       },
     });
     channel.ack(originalMessage);

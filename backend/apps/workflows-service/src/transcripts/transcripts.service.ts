@@ -75,7 +75,7 @@ export class TranscriptsService {
       text: string;
       wordCount: number;
       audioMs: number;
-      listInHistory: boolean;
+      listInHistory?: boolean;
     },
     em?: EntityManager,
   ): Promise<PublicTranscript> {
@@ -83,9 +83,8 @@ export class TranscriptsService {
     if (existing) {
       return this.toPublic(existing);
     }
-    if (typeof input.listInHistory !== 'boolean') {
-      throw new Error('listInHistory must be boolean');
-    }
+
+    const listInHistory = input.listInHistory ?? true;
 
     const row = new Transcript();
     row.id = randomUUID();
@@ -96,7 +95,7 @@ export class TranscriptsService {
     row.audioMs = input.audioMs;
     row.createdAt = new Date();
     row.deletedAt = null;
-    row.listInHistory = input.listInHistory;
+    row.listInHistory = listInHistory;
     return this.toPublic(await this.persist(row, em));
   }
 

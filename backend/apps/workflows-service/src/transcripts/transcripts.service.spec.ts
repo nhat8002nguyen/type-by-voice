@@ -216,13 +216,15 @@ describe('TranscriptsService', () => {
     expect(await service.get('user-1', quiet.id)).toBeNull();
     await service.create({ ...body, listInHistory: false, text: 'replaced' });
     expect((await service.list('user-1', { limit: 20 })).items).toHaveLength(1);
-    await expect(
-      service.create({
-        ...body,
-        requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee9',
-        listInHistory: undefined as never,
-      }),
-    ).rejects.toThrow('listInHistory must be boolean');
+    const defaulted = await service.create({
+      ...body,
+      requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee9',
+      text: 'defaulted history',
+      listInHistory: undefined as never,
+    });
+    expect(
+      (await service.list('user-1', { limit: 20 })).items.map((item) => item.id),
+    ).toEqual([defaulted.id, listed.id]);
   });
 
   it('soft-deletes a quiet row once, and deleteAll marks every remaining row once', async () => {
