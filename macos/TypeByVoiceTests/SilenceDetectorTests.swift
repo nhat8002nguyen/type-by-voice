@@ -17,4 +17,17 @@ final class SilenceDetectorTests: XCTestCase {
         let quiet = [Float](repeating: 0.001, count: 16_000)
         XCTAssertEqual(detector.process(samples: quiet, sampleRate: 16_000), .noSpeech)
     }
+
+    func testCalibrationIgnoresSpeechSpikesForNoiseFloor() {
+        var detector = SilenceDetector(silenceDurationMs: 300, noSpeechTimeoutMs: 10_000)
+        // 300 ms calibration: mostly quiet with a loud spike that must not set the floor.
+        var calib = [Float](repeating: 0.001, count: 1600 * 3)
+        for i in 0..<320 {
+            calib[800 + i] = 0.5
+        }
+        XCTAssertNil(detector.process(samples: calib, sampleRate: 16_000))
+        // Soft speech above quiet floor, well below the spike.
+        let softSpeech = [Float](repeating: 0.01, count: 3200)
+        XCTAssertEqual(detector.process(samples: softSpeech, sampleRate: 16_000), .speechStarted)
+    }
 }

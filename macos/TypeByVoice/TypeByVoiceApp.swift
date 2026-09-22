@@ -7,81 +7,64 @@ struct TypeByVoiceApp: App {
     @StateObject private var model = AppModel()
 
     var body: some Scene {
-        // Title text keeps the extra findable when the menu bar is crowded.
+        // Dock / Cmd-Tab visible window so the app is findable even if the
+        // menu-bar extra is hidden in the » overflow.
+        Window("Type by Voice", id: "main") {
+            Group {
+                if model.showsWelcome {
+                    OnboardingView(model: model)
+                } else {
+                    DashboardView(model: model)
+                }
+            }
+            .frame(minWidth: 420, minHeight: 440)
+        }
+        .defaultSize(width: 420, height: 440)
+
         MenuBarExtra {
-            MenuBarContent(model: model)
+            Group {
+                if model.showsWelcome {
+                    OnboardingView(model: model)
+                } else {
+                    DashboardView(model: model)
+                }
+            }
+            .frame(width: 420, height: 440)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: model.isSessionActive ? "mic.fill" : "mic")
                 Text("TBV")
             }
         }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView(model: model)
         }
-
-        Window("Welcome", id: "onboarding") {
-            OnboardingView(model: model)
-        }
-        .defaultSize(width: 420, height: 320)
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Accessory (LSUIElement) apps often can't present alerts; briefly go regular.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-
-        let alert = NSAlert()
-        alert.messageText = "Type by Voice is running"
-        alert.informativeText =
-            "Look for “TBV” (mic) in the menu bar — check the » overflow if needed.\nDefault hotkey: ⌘⇧D"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-
-        NSApp.setActivationPolicy(.accessory)
-    }
-}
-
-private struct MenuBarContent: View {
-    @ObservedObject var model: AppModel
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Button(model.isSessionActive ? "Stop" : "Start") {
-            model.startOrStop()
-        }
-        if let quota = model.quotaRemainingText {
-            Text(quota)
-        }
-        Divider()
-        Button("Settings…") {
-            openSettingsWindow()
-        }
-        Divider()
-        Button("Quit") {
-            model.quit()
-        }
-        .onAppear {
-            if model.showOnboarding {
-                openWindow(id: "onboarding")
-            }
-        }
-        .onChange(of: model.showOnboarding) { show in
-            if show {
-                openWindow(id: "onboarding")
+        // Bring any already-created main window forward.
+        DispatchQueue.main.async {
+            for window in NSApp.windows where window.title == "Type by Voice" {
+                window.makeKeyAndOrderFront(nil)
             }
         }
     }
 
-    private func openSettingsWindow() {
-        if #available(macOS 14.0, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        if !flag {
+            for window in NSApp.windows where window.title == "Type by Voice" {
+                window.makeKeyAndOrderFront(nil)
+            }
         }
+        return true
     }
 }

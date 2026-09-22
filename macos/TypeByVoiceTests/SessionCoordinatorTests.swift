@@ -107,7 +107,7 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertFalse(engine.stopCalled)
     }
 
-    func testTrailingSilenceIsTrimmedBeforeStop() async {
+    func testTrailingSilenceStillStreamsUntilStop() async {
         let engine = FakeTranscriptionEngine()
         let clock = Clock(now: Date(timeIntervalSince1970: 0))
         let coordinator = makeRecording(engine: engine, clock: clock)
@@ -120,22 +120,20 @@ final class SessionCoordinatorTests: XCTestCase {
 
         let quiet = [Float](repeating: 0.001, count: 16_000)
         coordinator.micFrame(samples: quiet)
-        XCTAssertEqual(engine.flushedBytes, bytesAfterSpeech)
+        // Streaming path no longer holds trailing silence — Whisper gets the full utterance.
+        XCTAssertGreaterThan(engine.flushedBytes, bytesAfterSpeech)
 
         clock.now = clock.now.addingTimeInterval(0.5)
         coordinator.hotkeyPressed()
         XCTAssertEqual(coordinator.state, .transcribing)
-
-        let hangoverBytes = engine.flushedBytes - bytesAfterSpeech
-        XCTAssertGreaterThan(hangoverBytes, 0)
-        XCTAssertLessThan(hangoverBytes, bytesAfterSpeech)
     }
 
-    /// Soft speech above floor×2.5 but below the old fixed 0.02 RMS must flush, not hold as silence.
-    func testTrailingSilenceUsesDetectorSpeechThreshold() async {
+    /// Soft speech above floor×2.0 must be detected for auto-stop, and still stream.
+    func testSoftSpeechStreamsAndSilenceAutoStops() async {
         let engine = FakeTranscriptionEngine()
         let clock = Clock(now: Date(timeIntervalSince1970: 0))
-        let coordinator = makeRecording(engine: engine, clock: clock)
+        let timeouts = SessionTimeouts(silenceDurationMs: 300)
+        let coordinator = makeRecording(engine: engine, clock: clock, timeouts: timeouts, advanceRecordingMs: 500)
 
         let noise = [Float](repeating: 0.001, count: 1600 * 3)
         coordinator.micFrame(samples: noise)
@@ -145,16 +143,27 @@ final class SessionCoordinatorTests: XCTestCase {
         coordinator.micFrame(samples: softSpeech)
         XCTAssertGreaterThan(engine.flushedBytes, afterCalibration)
 
-        let bytesAfterSpeech = engine.flushedBytes
-        let quiet = [Float](repeating: 0.001, count: 16_000)
+        let quiet = [Float](repeating: 0.001, count: 1600 * 4)
         coordinator.micFrame(samples: quiet)
-        XCTAssertEqual(engine.flushedBytes, bytesAfterSpeech)
+        XCTAssertEqual(coordinator.state, .transcribing)
+    }
 
+    /// Audio before speech is detected must stream — otherwise a whole utterance can be
+    /// discarded on stop and Whisper only sees ~100 ms hangover ("Thank you.").
+    func testPreSpeechAudioIsStreamedNotDiscardedOnStop() async {
+        let engine = FakeTranscriptionEngine()
+        let clock = Clock(now: Date(timeIntervalSince1970: 0))
+        let coordinator = makeRecording(engine: engine, clock: clock)
+
+        let soft = [Float](repeating: 0.001, count: 16_000)
+        coordinator.micFrame(samples: soft)
+        XCTAssertGreaterThan(engine.flushedBytes, 0)
+
+        let streamed = engine.flushedBytes
         clock.now = clock.now.addingTimeInterval(0.5)
         coordinator.hotkeyPressed()
-        let hangoverBytes = engine.flushedBytes - bytesAfterSpeech
-        XCTAssertGreaterThan(hangoverBytes, 0)
-        XCTAssertLessThan(hangoverBytes, bytesAfterSpeech)
+        XCTAssertEqual(coordinator.state, .transcribing)
+        XCTAssertGreaterThanOrEqual(engine.flushedBytes, streamed)
     }
 
     func testStopKeepsSocketWarmFor60s() async {

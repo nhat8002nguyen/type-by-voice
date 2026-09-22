@@ -67,21 +67,29 @@ final class AuthStore {
 
     private var memoryAccessToken: String?
     private var accessExpiresAt: Date?
+    private let defaults: UserDefaults
+    private static let emailDefaultsKey = "app.typebyvoice.accountEmail"
 
     var accessToken: String? {
         memoryAccessToken ?? keychain.accessToken
+    }
+
+    var accountEmail: String? {
+        defaults.string(forKey: Self.emailDefaultsKey)
     }
 
     init(
         http: AuthHTTPClient,
         keychain: KeychainStoring,
         deviceId: UUID,
-        clientVersion: String = ClientVersion.fromBundle()
+        clientVersion: String = ClientVersion.fromBundle(),
+        defaults: UserDefaults = .standard
     ) {
         self.http = http
         self.keychain = keychain
         self.deviceId = deviceId
         self.clientVersion = clientVersion
+        self.defaults = defaults
         self.memoryAccessToken = keychain.accessToken
     }
 
@@ -91,7 +99,7 @@ final class AuthStore {
             "password": password,
         ])
         let response = try await http.post(path: "/v1/auth/register", body: body)
-        try applyTokenResponse(response.json)
+        try applyTokenResponse(response.json, email: email)
     }
 
     func login(email: String, password: String) async throws {
@@ -100,7 +108,7 @@ final class AuthStore {
             "password": password,
         ])
         let response = try await http.post(path: "/v1/auth/login", body: body)
-        try applyTokenResponse(response.json)
+        try applyTokenResponse(response.json, email: email)
     }
 
     func refreshIfNeeded() async throws {
@@ -115,7 +123,7 @@ final class AuthStore {
             "refreshToken": refresh,
         ])
         let response = try await http.post(path: "/v1/auth/refresh", body: body)
-        try applyTokenResponse(response.json)
+        try applyTokenResponse(response.json, email: accountEmail)
     }
 
     func logout() async throws {
@@ -123,6 +131,7 @@ final class AuthStore {
         accessExpiresAt = nil
         keychain.accessToken = nil
         keychain.refreshToken = nil
+        defaults.removeObject(forKey: Self.emailDefaultsKey)
     }
 
     func forceAccessToken(_ token: String) {
@@ -143,7 +152,7 @@ final class AuthStore {
         return body
     }
 
-    private func applyTokenResponse(_ json: [String: Any]) throws {
+    private func applyTokenResponse(_ json: [String: Any], email: String?) throws {
         guard let access = json["accessToken"] as? String,
               let refresh = json["refreshToken"] as? String else {
             throw AuthStoreError.invalidTokenResponse
@@ -151,6 +160,9 @@ final class AuthStore {
         memoryAccessToken = access
         keychain.accessToken = access
         keychain.refreshToken = refresh
+        if let email, !email.isEmpty {
+            defaults.set(email, forKey: Self.emailDefaultsKey)
+        }
         if let expiresIn = json["expiresIn"] as? Int {
             accessExpiresAt = Date().addingTimeInterval(TimeInterval(expiresIn))
         } else if let expiresIn = json["expiresIn"] as? Double {

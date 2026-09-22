@@ -450,7 +450,7 @@
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TypeByVoice/Info.plist;
-				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Type by Voice needs the microphone to dictate.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -478,7 +478,7 @@
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TypeByVoice/Info.plist;
-				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Type by Voice needs the microphone to dictate.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
