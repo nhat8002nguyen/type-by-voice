@@ -1,5 +1,6 @@
 import type { ClientProxy } from '@nestjs/microservices';
 import {
+  TRANSCRIPTS_DELETE_ALL_PATTERN,
   TRANSCRIPTS_DELETE_PATTERN,
   TRANSCRIPTS_EXPORT_PATTERN,
   TRANSCRIPTS_GET_PATTERN,
@@ -52,6 +53,12 @@ export class TranscriptsService {
   delete(userId: string, id: string) {
     return firstValueFrom(
       this.workflows.send(TRANSCRIPTS_DELETE_PATTERN, { userId, id }),
+    );
+  }
+
+  deleteAll(userId: string) {
+    return firstValueFrom(
+      this.workflows.send(TRANSCRIPTS_DELETE_ALL_PATTERN, { userId }),
     );
   }
 

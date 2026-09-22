@@ -97,6 +97,14 @@ describe('TranscriptsController', () => {
     expect(channel.ack).not.toHaveBeenCalled();
   });
 
+  it('deleteAll delegates to the transcripts service', async () => {
+    const deleteAll = vi
+      .spyOn(transcriptsService, 'deleteAll')
+      .mockResolvedValue(undefined);
+    await controller.deleteAll({ userId: 'user-1' });
+    expect(deleteAll).toHaveBeenCalledWith('user-1');
+  });
+
   it('lists, gets, searches, deletes, and exports over NATS', async () => {
     await transcriptsService.create(dto);
     const listed = await controller.list({ userId: 'user-1', limit: 10 });

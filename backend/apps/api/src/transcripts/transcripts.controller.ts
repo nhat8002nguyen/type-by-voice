@@ -74,6 +74,12 @@ export class TranscriptsController {
     return item;
   }
 
+  @Delete()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteAll(@CurrentUser() user: TranscriptsActor) {
+    return this.transcriptsService.deleteAll(toUserId(user));
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   delete(@CurrentUser() user: TranscriptsActor, @Param('id') id: string) {

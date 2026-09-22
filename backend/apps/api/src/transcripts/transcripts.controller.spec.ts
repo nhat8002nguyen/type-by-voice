@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 import { AccessAuthGuard } from '../auth/access-auth.guard.js';
 import { AuthService } from '../auth/auth.service.js';
 import {
+  TRANSCRIPTS_DELETE_ALL_PATTERN,
   TRANSCRIPTS_DELETE_PATTERN,
   TRANSCRIPTS_EXPORT_PATTERN,
   TRANSCRIPTS_GET_PATTERN,
@@ -191,6 +192,17 @@ describe('Transcripts HTTP', () => {
     await createApp(vi.fn().mockReturnValue(of(undefined)));
     const response = await request(app.getHttpServer()).delete('/v1/transcripts/t1');
     expect(response.status).toBe(204);
+  });
+
+  it('DELETE /v1/transcripts soft-deletes every remaining row and returns 204', async () => {
+    const send = vi.fn().mockReturnValue(of(undefined));
+    await createApp(send);
+    const response = await request(app.getHttpServer()).delete('/v1/transcripts');
+    expect(response.status).toBe(204);
+    expect(response.text).toBe('');
+    expect(send).toHaveBeenCalledWith(TRANSCRIPTS_DELETE_ALL_PATTERN, {
+      userId: 'user-1',
+    });
   });
 
   it('returns 404 when GET /v1/transcripts/:id is missing', async () => {

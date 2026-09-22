@@ -1,6 +1,7 @@
 import { InboxService } from '@app/inbox';
 import {
   CreateTranscriptDto,
+  TRANSCRIPTS_DELETE_ALL_PATTERN,
   TRANSCRIPTS_DELETE_PATTERN,
   TRANSCRIPTS_EXPORT_PATTERN,
   TRANSCRIPTS_GET_PATTERN,
@@ -113,6 +114,11 @@ export class TranscriptsController {
   @MessagePattern(TRANSCRIPTS_DELETE_PATTERN)
   delete(@Payload() dto: TranscriptsGetDto) {
     return this.transcriptsService.delete(dto.userId, dto.id);
+  }
+
+  @MessagePattern(TRANSCRIPTS_DELETE_ALL_PATTERN)
+  deleteAll(@Payload() dto: TranscriptsUserDto) {
+    return this.transcriptsService.deleteAll(dto.userId);
   }
 
   @MessagePattern(TRANSCRIPTS_SEARCH_PATTERN)
