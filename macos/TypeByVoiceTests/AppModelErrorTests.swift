@@ -15,24 +15,106 @@ final class AppModelErrorTests: XCTestCase {
             keychain: FakeKeychain(refresh: "r", access: "stale"),
             deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!
         )
-        // Force expired access so refreshIfNeeded actually hits the network stub.
         auth.forceAccessToken("stale")
+        let engine = FakeTranscriptionEngine()
+        engine.updateAccessToken("stale")
         let model = AppModel(
             authStore: auth,
             audioCapture: AudioCaptureService(prepareImmediately: false),
-            engineURL: URL(string: "ws://127.0.0.1:9/v1/dictate")!,
-            apiBaseURL: URL(string: "http://127.0.0.1:9")!
+            transcriptionEngine: engine
         )
 
+        let startsBefore = engine.startCallCount
         await model.handleUnauthenticated()
         XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
         XCTAssertEqual(auth.accessToken, "fresh")
+        XCTAssertEqual(engine.accessToken, "fresh", "credentials must sync onto the engine")
+        await waitUntil(timeout: 1) { engine.startCallCount > startsBefore }
+        XCTAssertEqual(engine.startCallCount, startsBefore + 1, "must attempt a new session start")
         XCTAssertFalse(model.needsLogin)
 
         await model.handleUnauthenticated()
         XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
         XCTAssertTrue(model.needsLogin)
         XCTAssertTrue(model.showOnboarding)
+    }
+
+    func testRefreshFlagResetsAfterOnboardingSoNextEpisodeCanRefresh() async {
+        let http = FakeHTTP()
+        http.enqueue(json: [
+            "accessToken": "fresh-1",
+            "refreshToken": "r2",
+            "expiresIn": 900,
+        ])
+        http.enqueue(json: [
+            "accessToken": "fresh-2",
+            "refreshToken": "r3",
+            "expiresIn": 900,
+        ])
+        let auth = AuthStore(
+            http: http,
+            keychain: FakeKeychain(refresh: "r", access: "stale"),
+            deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!
+        )
+        auth.forceAccessToken("stale")
+        let engine = FakeTranscriptionEngine()
+        let model = AppModel(
+            authStore: auth,
+            audioCapture: AudioCaptureService(prepareImmediately: false),
+            transcriptionEngine: engine
+        )
+
+        await model.handleUnauthenticated()
+        await model.handleUnauthenticated()
+        XCTAssertTrue(model.needsLogin)
+
+        model.completeOnboarding()
+        XCTAssertFalse(model.needsLogin)
+
+        auth.forceAccessToken("stale-again")
+        await model.handleUnauthenticated()
+        XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 2)
+        XCTAssertEqual(engine.accessToken, "fresh-2")
+        XCTAssertFalse(model.needsLogin)
+    }
+
+    func testRefreshFlagResetsAfterSuccessfulReconnect() async {
+        let http = FakeHTTP()
+        http.enqueue(json: [
+            "accessToken": "fresh-1",
+            "refreshToken": "r2",
+            "expiresIn": 900,
+        ])
+        http.enqueue(json: [
+            "accessToken": "fresh-2",
+            "refreshToken": "r3",
+            "expiresIn": 900,
+        ])
+        let auth = AuthStore(
+            http: http,
+            keychain: FakeKeychain(refresh: "r", access: "stale"),
+            deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!
+        )
+        auth.forceAccessToken("stale")
+        let engine = FakeTranscriptionEngine()
+        let model = AppModel(
+            authStore: auth,
+            audioCapture: AudioCaptureService(prepareImmediately: false),
+            transcriptionEngine: engine
+        )
+
+        await model.handleUnauthenticated()
+        XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
+
+        // Successful reconnect (ready + frames → recording) ends the auth-failure episode.
+        model.feedMicForTests(samples: [0.1, 0.1])
+        engine.emitReady()
+        model.cancelForTests()
+
+        auth.forceAccessToken("stale-again")
+        await model.handleUnauthenticated()
+        XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 2)
+        XCTAssertFalse(model.needsLogin)
     }
 
     func testOverlayUsesSessionErrorRetryableFlag() {
@@ -44,5 +126,13 @@ final class AppModelErrorTests: XCTestCase {
         let retryable = OverlayError(message: "rate limited", retryable: true)
         overlay.render(.idle, level: 0, elapsed: 0, quota: nil, error: retryable)
         XCTAssertTrue(overlay.model.showsRetry)
+    }
+
+    private func waitUntil(timeout: TimeInterval, condition: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 }

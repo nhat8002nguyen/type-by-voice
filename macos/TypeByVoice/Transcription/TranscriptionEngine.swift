@@ -17,6 +17,9 @@ protocol TranscriptionEngine: AnyObject {
 
     /// Keep the socket warm until the given deadline after a completed dictation.
     func keepWarm(until: Date)
+
+    /// Update the bearer token used on the next `start`.
+    func updateAccessToken(_ token: String)
 }
 
 extension TranscriptionEngine {
@@ -29,6 +32,8 @@ extension TranscriptionEngine {
     }
 
     func keepWarm(until: Date) {}
+
+    func updateAccessToken(_ token: String) {}
 }
 
 enum EngineEvent: Equatable {

@@ -114,7 +114,7 @@ struct OnboardingView: View {
             } else {
                 try await model.authStore.login(email: email, password: password)
             }
-            model.syncEngineCredentials()
+            model.didAuthenticate()
             step = .microphone
         } catch {
             authError = error.localizedDescription

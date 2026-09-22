@@ -4,11 +4,13 @@ import Foundation
 final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var flushedBytes = 0
     private(set) var startCalled = false
+    private(set) var startCallCount = 0
     private(set) var stopCalled = false
     private(set) var cancelCalled = false
     private(set) var warmUntil: Date?
     private(set) var lastRequestId: UUID?
     private(set) var lastIdentity: ClientIdentity?
+    private(set) var accessToken = ""
 
     let deliversEventsSynchronously = true
 
@@ -25,8 +27,13 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         eventHandler = handler
     }
 
+    func updateAccessToken(_ token: String) {
+        accessToken = token
+    }
+
     func start(requestId: UUID, identity: ClientIdentity) async throws {
         startCalled = true
+        startCallCount += 1
         lastRequestId = requestId
         lastIdentity = identity
         flushedBytes = 0

@@ -18,7 +18,7 @@ final class AppModel: ObservableObject {
     let hotkey: HotkeyService
     let audioCapture: AudioCaptureService
 
-    private let engine: RemoteTranscriptionEngine
+    private let engine: TranscriptionEngine
     private let coordinator: SessionCoordinator
     private var lastQuota: QuotaSnapshot?
     private var recordingStartedAt: Date?
@@ -37,7 +37,8 @@ final class AppModel: ObservableObject {
         engineURL: URL = URL(string: ProcessInfo.processInfo.environment["TBV_DICTATE_URL"]
             ?? "ws://127.0.0.1:8080/v1/dictate")!,
         apiBaseURL: URL = URL(string: ProcessInfo.processInfo.environment["TBV_API_URL"]
-            ?? "http://127.0.0.1:8080")!
+            ?? "http://127.0.0.1:8080")!,
+        transcriptionEngine: TranscriptionEngine? = nil
     ) {
         let runningUnderXCTest =
             ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -80,7 +81,7 @@ final class AppModel: ObservableObject {
             restoreDelayMs: settings.clipboardRestoreDelayMs
         )
 
-        let engine = RemoteTranscriptionEngine(
+        let engine = transcriptionEngine ?? RemoteTranscriptionEngine(
             url: engineURL,
             token: resolvedAuth.accessToken ?? "",
             identity: resolvedAuth.clientIdentity
@@ -127,13 +128,29 @@ final class AppModel: ObservableObject {
         coordinator.hotkeyPressed()
     }
 
+    /// Test hook: feed synthetic mic frames into the session coordinator.
+    func feedMicForTests(samples: [Float]) {
+        coordinator.micFrame(samples: samples)
+    }
+
+    /// Test hook: cancel connecting/recording without setting lastError.
+    func cancelForTests() {
+        coordinator.escapePressed()
+    }
+
     func quit() {
         hotkey.unregister()
         audioCapture.stopCapture()
         NSApplication.shared.terminate(nil)
     }
 
+    func didAuthenticate() {
+        clearUnauthenticatedEpisode()
+        syncEngineCredentials()
+    }
+
     func completeOnboarding() {
+        clearUnauthenticatedEpisode()
         UserDefaults.standard.set(true, forKey: "app.typebyvoice.onboardingComplete")
         showOnboarding = false
         registerHotkey()
@@ -176,6 +193,11 @@ final class AppModel: ObservableObject {
             needsLogin = true
             showOnboarding = true
         }
+    }
+
+    private func clearUnauthenticatedEpisode() {
+        unauthenticatedRefreshUsed = false
+        needsLogin = false
     }
 
     private func registerHotkey() {
@@ -221,6 +243,9 @@ final class AppModel: ObservableObject {
         isSessionActive = state != .idle
         switch state {
         case .recording:
+            // Successful connect ends the auth-failure episode so a later
+            // unauthenticated can refresh once again.
+            clearUnauthenticatedEpisode()
             if recordingStartedAt == nil {
                 recordingStartedAt = Date()
             }
