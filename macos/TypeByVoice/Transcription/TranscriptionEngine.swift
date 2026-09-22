@@ -1,0 +1,35 @@
+import Foundation
+
+@MainActor
+protocol TranscriptionEngine: AnyObject {
+    func start(requestId: UUID, identity: ClientIdentity) async throws
+    func sendAudio(_ data: Data) async
+    func stop(durationMs: Int) async
+    func cancel() async
+    var events: AsyncStream<EngineEvent> { get }
+}
+
+enum EngineEvent: Equatable {
+    case ready(maxDurationMs: Int, quota: QuotaSnapshot)
+    case final(text: String, wordCount: Int, audioMs: Int, quota: QuotaSnapshot)
+    case error(code: String, message: String, retryable: Bool, details: [String: String])
+}
+
+struct QuotaSnapshot: Equatable {
+    var unit: String
+    var limit: Int?
+    var used: Int
+    var resetAt: Date
+}
+
+struct ClientIdentity: Equatable {
+    var platform: String
+    var clientVersion: String
+    var deviceId: UUID
+
+    static let preview = ClientIdentity(
+        platform: "macos",
+        clientVersion: "1.0.0+12",
+        deviceId: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+    )
+}
