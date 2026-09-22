@@ -42,10 +42,8 @@ final class SessionCoordinator {
         self.timeouts = timeouts
         self.encoder = encoder
 
-        if let fake = engine as? FakeTranscriptionEngine {
-            fake.synchronousEventSink = { [weak self] event in
-                self?.handleEngineEvent(event)
-            }
+        engine.setEventHandler { [weak self] event in
+            self?.handleEngineEvent(event)
         }
     }
 
@@ -155,13 +153,7 @@ final class SessionCoordinator {
     }
 
     private func transmitAudio(_ data: Data) {
-        if let fake = engine as? FakeTranscriptionEngine {
-            fake.applySendAudio(data)
-            return
-        }
-        Task { @MainActor [weak self] in
-            await self?.engine.sendAudio(data)
-        }
+        engine.sendAudioNow(data)
     }
 
     private func beginTranscribing() {
@@ -239,7 +231,7 @@ final class SessionCoordinator {
     }
 
     private func startEventLoopIfNeeded() {
-        guard !(engine is FakeTranscriptionEngine), !eventLoopStarted else { return }
+        guard !engine.deliversEventsSynchronously, !eventLoopStarted else { return }
         eventLoopStarted = true
         let stream = engine.events
         Task { @MainActor [weak self] in

@@ -7,6 +7,23 @@ protocol TranscriptionEngine: AnyObject {
     func stop(durationMs: Int) async
     func cancel() async
     var events: AsyncStream<EngineEvent> { get }
+
+    /// When true, events arrive via `setEventHandler` and the AsyncStream loop is skipped.
+    var deliversEventsSynchronously: Bool { get }
+    func setEventHandler(_ handler: (@MainActor (EngineEvent) -> Void)?)
+
+    /// Outbound audio path that may complete synchronously (test doubles).
+    func sendAudioNow(_ data: Data)
+}
+
+extension TranscriptionEngine {
+    var deliversEventsSynchronously: Bool { false }
+
+    func setEventHandler(_ handler: (@MainActor (EngineEvent) -> Void)?) {}
+
+    func sendAudioNow(_ data: Data) {
+        Task { await sendAudio(data) }
+    }
 }
 
 enum EngineEvent: Equatable {

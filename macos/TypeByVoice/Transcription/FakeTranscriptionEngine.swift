@@ -9,10 +9,9 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var lastRequestId: UUID?
     private(set) var lastIdentity: ClientIdentity?
 
-    var synchronousEventSink: ((EngineEvent) -> Void)?
+    let deliversEventsSynchronously = true
 
-    private var isReady = false
-    private var preReadyBytes: [Data] = []
+    private var eventHandler: (@MainActor (EngineEvent) -> Void)?
     private var eventsContinuation: AsyncStream<EngineEvent>.Continuation?
 
     lazy var events: AsyncStream<EngineEvent> = {
@@ -21,25 +20,23 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         }
     }()
 
+    func setEventHandler(_ handler: (@MainActor (EngineEvent) -> Void)?) {
+        eventHandler = handler
+    }
+
     func start(requestId: UUID, identity: ClientIdentity) async throws {
         startCalled = true
         lastRequestId = requestId
         lastIdentity = identity
-        isReady = false
         flushedBytes = 0
-        preReadyBytes = []
     }
 
     func sendAudio(_ data: Data) async {
-        applySendAudio(data)
+        sendAudioNow(data)
     }
 
-    func applySendAudio(_ data: Data) {
-        if isReady {
-            flushedBytes += data.count
-        } else {
-            preReadyBytes.append(data)
-        }
+    func sendAudioNow(_ data: Data) {
+        flushedBytes += data.count
     }
 
     func stop(durationMs: Int) async {
@@ -49,8 +46,6 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
 
     func cancel() async {
         cancelCalled = true
-        isReady = false
-        preReadyBytes = []
     }
 
     func emitReady(
@@ -62,10 +57,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
             resetAt: Date(timeIntervalSince1970: 0)
         )
     ) {
-        isReady = true
-        let event = EngineEvent.ready(maxDurationMs: maxDurationMs, quota: quota)
-        synchronousEventSink?(event)
-        eventsContinuation?.yield(event)
+        deliver(.ready(maxDurationMs: maxDurationMs, quota: quota))
     }
 
     func emitFinal(
@@ -80,9 +72,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         )
     ) {
         let words = wordCount ?? text.split { $0.isWhitespace || $0.isNewline }.count
-        let event = EngineEvent.final(text: text, wordCount: words, audioMs: audioMs, quota: quota)
-        synchronousEventSink?(event)
-        eventsContinuation?.yield(event)
+        deliver(.final(text: text, wordCount: words, audioMs: audioMs, quota: quota))
     }
 
     func emitError(
@@ -91,8 +81,11 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         retryable: Bool = false,
         details: [String: String] = [:]
     ) {
-        let event = EngineEvent.error(code: code, message: message, retryable: retryable, details: details)
-        synchronousEventSink?(event)
+        deliver(.error(code: code, message: message, retryable: retryable, details: details))
+    }
+
+    private func deliver(_ event: EngineEvent) {
+        eventHandler?(event)
         eventsContinuation?.yield(event)
     }
 }
