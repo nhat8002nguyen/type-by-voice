@@ -224,6 +224,40 @@ describe('TranscriptsService', () => {
       }),
     ).rejects.toThrow('listInHistory must be boolean');
   });
+
+  it('soft-deletes a quiet row once, and deleteAll marks every remaining row once', async () => {
+    const rows: Transcript[] = [];
+    const repository = createInMemoryRepo(rows);
+    const service = new TranscriptsService(
+      Buffer.alloc(32, 7),
+      repository as never,
+    );
+    const quiet = await service.create({
+      ...body,
+      requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee5',
+      text: 'quiet transcript',
+      listInHistory: false,
+    });
+    await service.delete('user-1', quiet.id);
+    const quietDeletedAt = rows.find((row) => row.id === quiet.id)?.deletedAt;
+    expect(quietDeletedAt).toBeInstanceOf(Date);
+    await service.delete('user-1', quiet.id);
+    expect(rows.find((row) => row.id === quiet.id)?.deletedAt).toBe(quietDeletedAt);
+
+    await service.create({
+      ...body,
+      requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee6',
+      text: 'still listed',
+      listInHistory: true,
+    });
+    await service.deleteAll('user-1');
+    const stamps = rows.map((row) => row.deletedAt);
+    expect(stamps.every((stamp) => stamp instanceof Date)).toBe(true);
+    await service.deleteAll('user-1');
+    expect(rows.map((row) => row.deletedAt)).toEqual(stamps);
+    expect(await service.export('user-1')).toEqual([]);
+    expect(await service.get('user-1', quiet.id)).toBeNull();
+  });
 });
 
 type Row = { id?: string } & Record<string, unknown>;
@@ -257,5 +291,15 @@ function createInMemoryRepo<T extends Row>(rows: T[]) {
       rows.filter((row) => matches(row, options.where)),
     findOne: async (options: { where: Record<string, unknown> }) =>
       rows.find((row) => matches(row, options.where)) ?? null,
+    update: async (
+      where: Record<string, unknown>,
+      partial: Record<string, unknown>,
+    ) => {
+      for (const row of rows) {
+        if (matches(row, where)) {
+          Object.assign(row, partial);
+        }
+      }
+    },
   };
 }

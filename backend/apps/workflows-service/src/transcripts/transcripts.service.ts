@@ -133,6 +133,20 @@ export class TranscriptsService {
     await this.persist(row);
   }
 
+  async deleteAll(userId: string, em?: EntityManager): Promise<void> {
+    const now = new Date();
+    const repository = this.store(em);
+    if (!repository) {
+      for (const row of this.byId.values()) {
+        if (row.userId === userId && row.deletedAt == null) {
+          row.deletedAt = now;
+        }
+      }
+      return;
+    }
+    await repository.update({ userId, deletedAt: IsNull() }, { deletedAt: now });
+  }
+
   async export(userId: string): Promise<PublicTranscript[]> {
     return (await this.loadVisible(userId)).map((row) => this.toPublic(row));
   }
