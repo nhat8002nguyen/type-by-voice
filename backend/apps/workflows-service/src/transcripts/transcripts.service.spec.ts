@@ -11,6 +11,7 @@ const body = {
   text: 'the transcribed text',
   wordCount: 3,
   audioMs: 11800,
+  listInHistory: true,
 };
 
 describe('TranscriptsService', () => {
@@ -22,6 +23,7 @@ describe('TranscriptsService', () => {
       text: 'the transcribed text',
       wordCount: 3,
       audioMs: 11800,
+      listInHistory: true,
     });
     const hits = await service.search('user-1', 'transcribed');
     expect(hits.items).toHaveLength(1);
@@ -193,6 +195,34 @@ describe('TranscriptsService', () => {
     expect((await service.search('user-1', 'transcribed')).items).toHaveLength(
       1,
     );
+  });
+
+  it('hides quiet rows from list, search, export, and get, and keeps the flag on replay', async () => {
+    const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
+    const listed = await service.create(body);
+    const quiet = await service.create({
+      ...body,
+      requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee4',
+      text: 'quiet transcript',
+      listInHistory: false,
+    });
+    expect((await service.list('user-1', { limit: 20 })).items.map((item) => item.id)).toEqual([
+      listed.id,
+    ]);
+    expect((await service.search('user-1', 'quiet')).items).toHaveLength(0);
+    expect(await service.export('user-1')).toEqual([
+      expect.objectContaining({ id: listed.id, text: 'the transcribed text' }),
+    ]);
+    expect(await service.get('user-1', quiet.id)).toBeNull();
+    await service.create({ ...body, listInHistory: false, text: 'replaced' });
+    expect((await service.list('user-1', { limit: 20 })).items).toHaveLength(1);
+    await expect(
+      service.create({
+        ...body,
+        requestId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee9',
+        listInHistory: undefined as never,
+      }),
+    ).rejects.toThrow('listInHistory must be boolean');
   });
 });
 

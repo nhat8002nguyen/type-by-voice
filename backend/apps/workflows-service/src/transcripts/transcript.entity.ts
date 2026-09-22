@@ -30,4 +30,7 @@ export class Transcript {
 
   @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt: Date | null;
+
+  @Column({ name: 'list_in_history', type: 'boolean' })
+  listInHistory: boolean;
 }
