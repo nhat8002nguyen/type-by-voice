@@ -18,6 +18,7 @@ export interface StartMessage {
   platform: Platform;
   clientVersion: string;
   deviceId: string;
+  listInHistory: boolean;
 }
 
 export interface StopMessage {

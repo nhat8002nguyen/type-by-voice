@@ -22,6 +22,7 @@ describe('protocol fixtures', () => {
       platform: 'macos',
       clientVersion: '1.0.0+12',
       deviceId: '9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77',
+      listInHistory: true,
     });
   });
 

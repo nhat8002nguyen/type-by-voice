@@ -28,4 +28,19 @@ describe('validateStart', () => {
     const start = { ...loadFixture<StartMessage>('start.valid.json'), deviceId: 'not-a-uuid' };
     expect(validateStart(start).ok).toBe(false);
   });
+
+  it('requires a boolean listInHistory', () => {
+    const start = loadFixture<StartMessage>('start.valid.json');
+    const result = validateStart(start);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.listInHistory).toBe(true);
+    }
+    const { listInHistory: _ignored, ...without } = {
+      ...start,
+      listInHistory: true,
+    };
+    expect(validateStart(without).ok).toBe(false);
+    expect(validateStart({ ...start, listInHistory: 'yes' }).ok).toBe(false);
+  });
 });
