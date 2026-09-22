@@ -5,21 +5,26 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
     private let url: URL
     private(set) var accessToken: String
 
+    let deliversEventsSynchronously = true
+
     private var session: URLSession?
     private var task: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
+    private var warmCloseTask: Task<Void, Never>?
     private var requestId: UUID?
     private var isReady = false
     private var pendingAudio: [Data] = []
-    private var eventsContinuation: AsyncStream<EngineEvent>.Continuation?
     private var eventHandler: (@MainActor (EngineEvent) -> Void)?
-    private var warmUntil: Date?
+    private(set) var warmUntil: Date?
 
-    lazy var events: AsyncStream<EngineEvent> = {
-        AsyncStream { continuation in
-            self.eventsContinuation = continuation
+    /// Exposed for tests: true when the last `start` reused a warm socket.
+    private(set) var lastStartReusedWarmSocket = false
+
+    var events: AsyncStream<EngineEvent> {
+        AsyncStream { _ in
+            // Events are delivered only via `setEventHandler` (sync path).
         }
-    }()
+    }
 
     init(url: URL, token: String, identity: ClientIdentity) {
         self.url = url
@@ -36,22 +41,23 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
     }
 
     func start(requestId: UUID, identity: ClientIdentity) async throws {
-        await tearDownSocket()
+        warmCloseTask?.cancel()
+        warmCloseTask = nil
+
+        let reuse = canReuseWarmSocket()
+        lastStartReusedWarmSocket = reuse
+        if !reuse {
+            await tearDownSocket()
+            openSocket()
+        }
+
+        warmUntil = nil
         self.requestId = requestId
         isReady = false
         pendingAudio = []
 
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-
-        let session = URLSession(configuration: .default)
-        self.session = session
-        let task = session.webSocketTask(with: request)
-        self.task = task
-        task.resume()
-
-        receiveTask = Task { [weak self] in
-            await self?.receiveLoop()
+        guard let task else {
+            throw URLError(.notConnectedToInternet)
         }
 
         let payload = StartPayload(
@@ -91,6 +97,9 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
     }
 
     func cancel() async {
+        warmCloseTask?.cancel()
+        warmCloseTask = nil
+        warmUntil = nil
         guard let requestId else {
             await tearDownSocket()
             return
@@ -101,7 +110,41 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
     }
 
     func keepWarm(until: Date) {
-        warmUntil = until
+        // Prefer the caller's deadline when it is still ahead of wall clock.
+        // Injected SessionCoordinator clocks may pass a past absolute Date; in that
+        // case hold for 60s from now so stop/final can still complete.
+        let delay = until.timeIntervalSince(Date())
+        let holdSeconds = delay > 0 ? delay : 60
+        let deadline = Date().addingTimeInterval(holdSeconds)
+        warmUntil = deadline
+        warmCloseTask?.cancel()
+        warmCloseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(holdSeconds * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            guard self.warmUntil == deadline else { return }
+            self.warmUntil = nil
+            await self.tearDownSocket()
+        }
+    }
+
+    private func canReuseWarmSocket() -> Bool {
+        guard let warmUntil, Date() < warmUntil, task != nil else { return false }
+        return true
+    }
+
+    private func openSocket() {
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+
+        let session = URLSession(configuration: .default)
+        self.session = session
+        let task = session.webSocketTask(with: request)
+        self.task = task
+        task.resume()
+
+        receiveTask = Task { [weak self] in
+            await self?.receiveLoop()
+        }
     }
 
     private func receiveLoop() async {
@@ -224,7 +267,6 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
 
     private func deliver(_ event: EngineEvent) {
         eventHandler?(event)
-        eventsContinuation?.yield(event)
     }
 
     private func tearDownSocket() async {

@@ -128,6 +128,26 @@ final class AppModelErrorTests: XCTestCase {
         XCTAssertTrue(overlay.model.showsRetry)
     }
 
+    func testEscapeWiringCancelsConnectingViaAppModelHook() {
+        let engine = FakeTranscriptionEngine()
+        let model = AppModel(
+            authStore: AuthStore(
+                http: FakeHTTP(),
+                keychain: FakeKeychain(),
+                deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!,
+                clientVersion: "1.0.0+12"
+            ),
+            audioCapture: AudioCaptureService(prepareImmediately: false),
+            transcriptionEngine: engine
+        )
+        model.startOrStop()
+        XCTAssertTrue(model.isSessionActive)
+        model.installEscapeMonitorForTests()
+        XCTAssertTrue(model.escapeMonitorInstalled)
+        model.handleEscapeKeyForTests()
+        XCTAssertFalse(model.isSessionActive)
+    }
+
     private func waitUntil(timeout: TimeInterval, condition: () -> Bool) async {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

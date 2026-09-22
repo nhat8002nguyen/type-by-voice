@@ -38,10 +38,12 @@ struct OnboardingView: View {
                         .foregroundStyle(.red)
                 }
                 Button("Allow Microphone") {
-                    model.permissions.requestMicrophone()
-                    model.permissions.refresh()
-                    if model.permissions.microphone == .granted {
-                        step = .accessibility
+                    Task {
+                        await model.permissions.requestMicrophone()
+                        model.permissions.refresh()
+                        if model.permissions.microphone == .granted {
+                            step = .accessibility
+                        }
                     }
                 }
             case .accessibility:

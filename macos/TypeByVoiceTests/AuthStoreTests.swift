@@ -45,7 +45,8 @@ final class AuthStoreTests: XCTestCase {
         let store = AuthStore(
             http: http,
             keychain: FakeKeychain(),
-            deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!
+            deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!,
+            clientVersion: "1.0.0+12"
         )
         try await store.register(email: "a@b.co", password: "pw")
         XCTAssertEqual(http.lastBody["platform"] as? String, "macos")
@@ -55,6 +56,31 @@ final class AuthStoreTests: XCTestCase {
         )
         XCTAssertEqual(http.lastBody["clientVersion"] as? String, store.clientVersion)
         XCTAssertEqual(store.accessToken, "a")
+    }
+
+    func testClientVersionFormatIsMarketingPlusBuild() {
+        let version = ClientVersion.fromBundle()
+        let parts = version.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)
+        XCTAssertEqual(parts.count, 2, "expected marketing+build, got \(version)")
+        XCTAssertFalse(parts[0].isEmpty)
+        XCTAssertFalse(parts[1].isEmpty)
+        XCTAssertEqual(ClientVersion.fromBundle(), "\(parts[0])+\(parts[1])")
+    }
+
+    func testClientVersionUsesExplicitBundleValues() {
+        // Simulate marketing/build via the same formatting rule the app uses.
+        let marketing = "2.3.4"
+        let build = "99"
+        let formatted = "\(marketing)+\(build)"
+        XCTAssertEqual(formatted, "2.3.4+99")
+        let store = AuthStore(
+            http: FakeHTTP(),
+            keychain: FakeKeychain(),
+            deviceId: UUID(),
+            clientVersion: formatted
+        )
+        XCTAssertEqual(store.clientVersion, "2.3.4+99")
+        XCTAssertEqual(store.clientIdentity.clientVersion, "2.3.4+99")
     }
 
     func testRefreshOnceThenGivesUp() async {

@@ -11,17 +11,18 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var lastRequestId: UUID?
     private(set) var lastIdentity: ClientIdentity?
     private(set) var accessToken = ""
+    private(set) var isSocketOpen = false
+    private(set) var lastStartReusedWarmSocket = false
+    private(set) var warmCloseCount = 0
 
     let deliversEventsSynchronously = true
 
     private var eventHandler: (@MainActor (EngineEvent) -> Void)?
-    private var eventsContinuation: AsyncStream<EngineEvent>.Continuation?
+    private var warmCloseTask: Task<Void, Never>?
 
-    lazy var events: AsyncStream<EngineEvent> = {
-        AsyncStream { continuation in
-            self.eventsContinuation = continuation
-        }
-    }()
+    var events: AsyncStream<EngineEvent> {
+        AsyncStream { _ in }
+    }
 
     func setEventHandler(_ handler: (@MainActor (EngineEvent) -> Void)?) {
         eventHandler = handler
@@ -32,6 +33,16 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     }
 
     func start(requestId: UUID, identity: ClientIdentity) async throws {
+        warmCloseTask?.cancel()
+        warmCloseTask = nil
+
+        let reuse = canReuseWarmSocket()
+        lastStartReusedWarmSocket = reuse
+        if !reuse {
+            isSocketOpen = true
+        }
+        warmUntil = nil
+
         startCalled = true
         startCallCount += 1
         lastRequestId = requestId
@@ -53,11 +64,50 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     }
 
     func cancel() async {
+        warmCloseTask?.cancel()
+        warmCloseTask = nil
+        warmUntil = nil
         cancelCalled = true
+        isSocketOpen = false
     }
 
     func keepWarm(until: Date) {
+        // Preserve the coordinator's deadline for assertions; keep the socket open.
         warmUntil = until
+        isSocketOpen = true
+        warmCloseTask?.cancel()
+        warmCloseTask = nil
+        // Only schedule wall-clock close for real future deadlines. Tests that inject
+        // synthetic clocks call `expireWarmSocketForTests()` instead.
+        let delay = until.timeIntervalSince(Date())
+        guard delay > 0 else { return }
+        let deadline = until
+        warmCloseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            guard self.warmUntil == deadline else { return }
+            self.closeWarmSocket()
+        }
+    }
+
+    /// Test helper: expire warm hold immediately (simulates wall-clock deadline).
+    func expireWarmSocketForTests() {
+        guard warmUntil != nil else { return }
+        warmCloseTask?.cancel()
+        warmCloseTask = nil
+        closeWarmSocket()
+    }
+
+    private func canReuseWarmSocket() -> Bool {
+        // Any active warm hold reuses the socket. Synthetic test clocks may put
+        // `warmUntil` in the past; those stays warm until `expireWarmSocketForTests`.
+        warmUntil != nil && isSocketOpen
+    }
+
+    private func closeWarmSocket() {
+        warmUntil = nil
+        isSocketOpen = false
+        warmCloseCount += 1
     }
 
     func emitReady(
@@ -98,6 +148,5 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
 
     private func deliver(_ event: EngineEvent) {
         eventHandler?(event)
-        eventsContinuation?.yield(event)
     }
 }

@@ -163,6 +163,102 @@ final class SessionCoordinatorTests: XCTestCase {
         let coordinator = makeRecording(engine: engine, clock: clock)
         coordinator.hotkeyPressed()
         XCTAssertEqual(engine.warmUntil, clock.now.addingTimeInterval(60))
+        XCTAssertTrue(engine.isSocketOpen)
+    }
+
+    func testWarmSocketReusedOnNextStart() async {
+        let engine = FakeTranscriptionEngine()
+        let clock = Clock(now: Date())
+        let coordinator = makeRecording(engine: engine, clock: clock)
+        await waitUntil { engine.startCallCount >= 1 }
+
+        coordinator.hotkeyPressed()
+        XCTAssertNotNil(engine.warmUntil)
+        XCTAssertTrue(engine.isSocketOpen)
+
+        engine.emitFinal(text: "hello")
+        await waitUntil { coordinator.state == .idle }
+
+        let startsBefore = engine.startCallCount
+        coordinator.hotkeyPressed()
+        await waitUntil { engine.startCallCount > startsBefore }
+        XCTAssertEqual(engine.startCallCount, startsBefore + 1)
+        XCTAssertTrue(engine.lastStartReusedWarmSocket)
+    }
+
+    func testWarmSocketClosesAfterExpire() async {
+        let engine = FakeTranscriptionEngine()
+        let clock = Clock(now: Date())
+        let coordinator = makeRecording(engine: engine, clock: clock)
+        await waitUntil { engine.startCallCount >= 1 }
+
+        coordinator.hotkeyPressed()
+        XCTAssertTrue(engine.isSocketOpen)
+        XCTAssertEqual(engine.warmCloseCount, 0)
+
+        engine.emitFinal(text: "done")
+        await waitUntil { coordinator.state == .idle }
+
+        engine.expireWarmSocketForTests()
+        XCTAssertFalse(engine.isSocketOpen)
+        XCTAssertNil(engine.warmUntil)
+        XCTAssertEqual(engine.warmCloseCount, 1)
+
+        let startsBefore = engine.startCallCount
+        coordinator.hotkeyPressed()
+        await waitUntil { engine.startCallCount > startsBefore }
+        XCTAssertEqual(engine.startCallCount, startsBefore + 1)
+        XCTAssertFalse(engine.lastStartReusedWarmSocket)
+    }
+
+    func testStopFlushesEncoderEOSPage() async {
+        let engine = FakeTranscriptionEngine()
+        let clock = Clock(now: Date(timeIntervalSince1970: 0))
+        let coordinator = makeRecording(engine: engine, clock: clock)
+        let beforeStop = engine.flushedBytes
+
+        clock.now = clock.now.addingTimeInterval(0.5)
+        coordinator.hotkeyPressed()
+        XCTAssertEqual(coordinator.state, .transcribing)
+        // finish() always emits at least an EOS Ogg page.
+        XCTAssertGreaterThan(engine.flushedBytes, beforeStop)
+    }
+
+    func testServerMaxDurationMsCapsRecordingHardCap() async {
+        let engine = FakeTranscriptionEngine()
+        let clock = Clock(now: Date(timeIntervalSince1970: 0))
+        let timeouts = SessionTimeouts(recordingHardCap: 120)
+        let coordinator = SessionCoordinator(
+            engine: engine,
+            inserter: FakeInserter(),
+            clock: clock,
+            timeouts: timeouts
+        )
+        coordinator.hotkeyPressed()
+        coordinator.micFrame(samples: [0.1, 0.1])
+        engine.emitReady(maxDurationMs: 5_000)
+        XCTAssertEqual(coordinator.state, .recording)
+
+        clock.now = clock.now.addingTimeInterval(5.0)
+        coordinator.tick(now: clock.now)
+        XCTAssertEqual(coordinator.state, .transcribing)
+    }
+
+    func testEscapeCancelsConnecting() {
+        let engine = FakeTranscriptionEngine()
+        let coordinator = makeConnecting(engine: engine)
+        coordinator.escapePressed()
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertNil(coordinator.lastError)
+    }
+
+    func testEscapeCancelsRecording() {
+        let engine = FakeTranscriptionEngine()
+        let coordinator = makeRecording(engine: engine)
+        coordinator.escapePressed()
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertNil(coordinator.lastError)
+        XCTAssertFalse(engine.stopCalled)
     }
 
     func testReadyAndFinalPublishQuota() async {
@@ -234,6 +330,18 @@ final class SessionCoordinatorTests: XCTestCase {
         coordinator.hotkeyPressed()
         XCTAssertEqual(coordinator.state, .connecting)
         return coordinator
+    }
+
+    private func waitBriefly() async {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+
+    private func waitUntil(timeout: TimeInterval = 1, condition: @escaping () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     private func makeRecording(

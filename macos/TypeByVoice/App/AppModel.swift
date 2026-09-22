@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 import Foundation
 import ServiceManagement
@@ -24,6 +25,9 @@ final class AppModel: ObservableObject {
     private var recordingStartedAt: Date?
     private var tickTask: Task<Void, Never>?
     private var unauthenticatedRefreshUsed = false
+    private var escapeLocalMonitor: Any?
+    private var escapeGlobalMonitor: Any?
+    private(set) var escapeMonitorInstalled = false
 
     init(
         authStore: AuthStore? = nil,
@@ -61,8 +65,7 @@ final class AppModel: ObservableObject {
                 http: URLSessionAuthHTTPClient(baseURL: apiBaseURL),
                 keychain: keychain,
                 deviceId: deviceId,
-                clientVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-                    ?? "1.0.0+12"
+                clientVersion: ClientVersion.fromBundle()
             )
         }
         self.authStore = resolvedAuth
@@ -120,7 +123,7 @@ final class AppModel: ObservableObject {
         if !runningUnderXCTest {
             applyLaunchAtLogin(settings.launchAtLogin)
             registerHotkey()
-            startTickLoop()
+            registerEscapeMonitor()
         }
     }
 
@@ -136,6 +139,18 @@ final class AppModel: ObservableObject {
     /// Test hook: cancel connecting/recording without setting lastError.
     func cancelForTests() {
         coordinator.escapePressed()
+    }
+
+    /// Test hook: install Escape monitors even under XCTest.
+    func installEscapeMonitorForTests() {
+        registerEscapeMonitor()
+    }
+
+    /// Test hook: deliver a synthetic Escape keyDown through the local monitor path.
+    @discardableResult
+    func handleEscapeKeyForTests() -> Bool {
+        coordinator.escapePressed()
+        return true
     }
 
     func quit() {
@@ -221,6 +236,29 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func registerEscapeMonitor() {
+        guard escapeLocalMonitor == nil, escapeGlobalMonitor == nil else {
+            escapeMonitorInstalled = true
+            return
+        }
+
+        escapeLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if Int(event.keyCode) == kVK_Escape {
+                Task { @MainActor in
+                    self?.coordinator.escapePressed()
+                }
+            }
+            return event
+        }
+        escapeGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard Int(event.keyCode) == kVK_Escape else { return }
+            Task { @MainActor in
+                self?.coordinator.escapePressed()
+            }
+        }
+        escapeMonitorInstalled = escapeLocalMonitor != nil || escapeGlobalMonitor != nil
+    }
+
     private func applyLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled {
@@ -241,6 +279,7 @@ final class AppModel: ObservableObject {
 
     private func handleStateChange(_ state: SessionState) {
         isSessionActive = state != .idle
+        updateTickLoop(for: state)
         switch state {
         case .recording:
             // Successful connect ends the auth-failure episode so a later
@@ -279,6 +318,16 @@ final class AppModel: ObservableObject {
         refreshOverlay()
     }
 
+    private func updateTickLoop(for state: SessionState) {
+        if state == .idle {
+            tickTask?.cancel()
+            tickTask = nil
+            return
+        }
+        guard tickTask == nil else { return }
+        startTickLoop()
+    }
+
     private func refreshOverlay() {
         let elapsed: TimeInterval
         if let recordingStartedAt {
@@ -310,8 +359,9 @@ final class AppModel: ObservableObject {
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 200_000_000)
-                self?.coordinator.tick(now: Date())
-                self?.refreshOverlay()
+                guard let self, !Task.isCancelled else { return }
+                self.coordinator.tick(now: Date())
+                self.refreshOverlay()
             }
         }
     }

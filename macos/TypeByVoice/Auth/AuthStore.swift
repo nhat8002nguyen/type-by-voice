@@ -76,8 +76,7 @@ final class AuthStore {
         http: AuthHTTPClient,
         keychain: KeychainStoring,
         deviceId: UUID,
-        clientVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-            ?? "1.0.0+12"
+        clientVersion: String = ClientVersion.fromBundle()
     ) {
         self.http = http
         self.keychain = keychain

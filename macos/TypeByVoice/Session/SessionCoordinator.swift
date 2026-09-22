@@ -28,6 +28,7 @@ final class SessionCoordinator {
     private var transcribingStartedAt: Date?
     private var insertingStartedAt: Date?
     private var eventLoopStarted = false
+    private var effectiveRecordingHardCap: TimeInterval
 
     private static let sampleRate = 16_000
 
@@ -47,6 +48,7 @@ final class SessionCoordinator {
         self.identity = identity
         self.timeouts = timeouts
         self.encoder = encoder
+        self.effectiveRecordingHardCap = timeouts.recordingHardCap
         self.silenceDetector = SilenceDetector(
             silenceDurationMs: timeouts.silenceDurationMs,
             noSpeechTimeoutMs: timeouts.noSpeechTimeoutMs
@@ -114,7 +116,7 @@ final class SessionCoordinator {
             }
         case .recording:
             if let started = recordingStartedAt,
-               now.timeIntervalSince(started) >= timeouts.recordingHardCap {
+               now.timeIntervalSince(started) >= effectiveRecordingHardCap {
                 beginTranscribing()
             }
         case .transcribing:
@@ -142,6 +144,7 @@ final class SessionCoordinator {
         recordingStartedAt = nil
         transcribingStartedAt = nil
         insertingStartedAt = nil
+        effectiveRecordingHardCap = timeouts.recordingHardCap
         silenceDetector.reset()
         encoder.reset()
         audioCapture.startCapture()
@@ -250,6 +253,10 @@ final class SessionCoordinator {
         guard state == .recording else { return }
         audioCapture.stopCapture()
         flushHeldSilence(trimmingTrailing: true)
+        let eos = encoder.finish()
+        if !eos.isEmpty {
+            transmitAudio(eos)
+        }
         let durationMs = recordingDurationMs()
         transcribingStartedAt = clock.now
         transition(to: .transcribing)
@@ -294,9 +301,11 @@ final class SessionCoordinator {
 
     private func handleEngineEvent(_ event: EngineEvent) {
         switch event {
-        case let .ready(_, quota):
+        case let .ready(maxDurationMs, quota):
             publishQuota(quota)
             guard state == .connecting else { return }
+            let serverCap = TimeInterval(maxDurationMs) / 1_000
+            effectiveRecordingHardCap = min(timeouts.recordingHardCap, serverCap)
             hasReady = true
             promoteToRecordingIfNeeded()
         case let .final(text, _, _, quota):

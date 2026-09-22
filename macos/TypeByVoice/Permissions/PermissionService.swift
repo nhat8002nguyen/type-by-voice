@@ -8,6 +8,7 @@ enum PermissionState: Equatable {
     case denied
 }
 
+@MainActor
 final class PermissionService {
     private(set) var microphone: PermissionState = .unknown
     private(set) var accessibility: PermissionState = .unknown
@@ -21,19 +22,19 @@ final class PermissionService {
         accessibility = Self.currentAccessibilityState()
     }
 
-    func requestMicrophone() {
+    func requestMicrophone() async {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             microphone = .granted
         case .denied, .restricted:
             microphone = .denied
         case .notDetermined:
-            let semaphore = DispatchSemaphore(value: 0)
-            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-                self?.microphone = granted ? .granted : .denied
-                semaphore.signal()
+            let granted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    continuation.resume(returning: granted)
+                }
             }
-            _ = semaphore.wait(timeout: .now() + 30)
+            microphone = granted ? .granted : .denied
         @unknown default:
             microphone = .unknown
         }
