@@ -197,7 +197,7 @@ describe('TranscriptsService', () => {
     );
   });
 
-  it('hides quiet rows from list, search, export, and get, and keeps the flag on replay', async () => {
+  it('hides quiet rows from list, search, export, and get, and defaults missing flag', async () => {
     const service = TranscriptsService.withMemory(Buffer.alloc(32, 7));
     const listed = await service.create(body);
     const quiet = await service.create({
@@ -206,9 +206,9 @@ describe('TranscriptsService', () => {
       text: 'quiet transcript',
       listInHistory: false,
     });
-    expect((await service.list('user-1', { limit: 20 })).items.map((item) => item.id)).toEqual([
-      listed.id,
-    ]);
+    expect(
+      (await service.list('user-1', { limit: 20 })).items.map((item) => item.id),
+    ).toEqual([listed.id]);
     expect((await service.search('user-1', 'quiet')).items).toHaveLength(0);
     expect(await service.export('user-1')).toEqual([
       expect.objectContaining({ id: listed.id, text: 'the transcribed text' }),
