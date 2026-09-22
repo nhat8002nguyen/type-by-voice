@@ -3,13 +3,18 @@ import SwiftUI
 
 @main
 struct TypeByVoiceApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
 
     var body: some Scene {
+        // Title text keeps the extra findable when the menu bar is crowded.
         MenuBarExtra {
             MenuBarContent(model: model)
         } label: {
-            Image(systemName: model.isSessionActive ? "mic.fill" : "mic")
+            HStack(spacing: 4) {
+                Image(systemName: model.isSessionActive ? "mic.fill" : "mic")
+                Text("TBV")
+            }
         }
 
         Settings {
@@ -20,6 +25,24 @@ struct TypeByVoiceApp: App {
             OnboardingView(model: model)
         }
         .defaultSize(width: 420, height: 320)
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Accessory (LSUIElement) apps often can't present alerts; briefly go regular.
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Type by Voice is running"
+        alert.informativeText =
+            "Look for “TBV” (mic) in the menu bar — check the » overflow if needed.\nDefault hotkey: ⌘⇧D"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 

@@ -52,14 +52,19 @@ final class AudioCaptureService: AudioCaptureStarting {
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else { return }
 
         let bufferSize: AVAudioFrameCount = 1_024
-        input.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
-            let samplesAndPeak = Self.convert(buffer: buffer, converter: converter, outputFormat: outputFormat)
-            guard let samplesAndPeak else { return }
+        // Tap callback runs on AVAudioEngine's realtime queue — keep it off the MainActor.
+        Self.installTap(
+            on: input,
+            bufferSize: bufferSize,
+            format: inputFormat,
+            converter: converter,
+            outputFormat: outputFormat
+        ) { [weak self] samples, peak in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.ringBuffer.write(samplesAndPeak.samples)
-                self.lastLevel = Double(min(max(samplesAndPeak.peak, 0), 1))
-                self.onSamples?(samplesAndPeak.samples)
+                self.ringBuffer.write(samples)
+                self.lastLevel = Double(min(max(peak, 0), 1))
+                self.onSamples?(samples)
             }
         }
         isTapInstalled = true
@@ -69,6 +74,28 @@ final class AudioCaptureService: AudioCaptureStarting {
         } catch {
             input.removeTap(onBus: 0)
             isTapInstalled = false
+        }
+    }
+
+    private nonisolated static func installTap(
+        on input: AVAudioInputNode,
+        bufferSize: AVAudioFrameCount,
+        format: AVAudioFormat,
+        converter: AVAudioConverter,
+        outputFormat: AVAudioFormat,
+        onConverted: @escaping @Sendable ([Float], Float) -> Void
+    ) {
+        nonisolated(unsafe) let converter = converter
+        nonisolated(unsafe) let outputFormat = outputFormat
+        input.installTap(onBus: 0, bufferSize: bufferSize, format: format) { buffer, _ in
+            guard let samplesAndPeak = convert(
+                buffer: buffer,
+                converter: converter,
+                outputFormat: outputFormat
+            ) else {
+                return
+            }
+            onConverted(samplesAndPeak.samples, samplesAndPeak.peak)
         }
     }
 

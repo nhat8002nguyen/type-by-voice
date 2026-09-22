@@ -13,6 +13,7 @@ const dto = {
   text: 'the transcribed text',
   wordCount: 3,
   audioMs: 11800,
+  listInHistory: true,
 };
 
 describe('TranscriptsController', () => {

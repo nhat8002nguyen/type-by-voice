@@ -236,7 +236,7 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
               let unit = dict["unit"] as? String,
               let used = dict["used"] as? Int,
               let resetAtRaw = dict["resetAt"] as? String,
-              let resetAt = Self.iso8601.date(from: resetAtRaw)
+              let resetAt = ISO8601Parsing.date(from: resetAtRaw)
         else {
             return nil
         }
@@ -281,11 +281,20 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
         requestId = nil
     }
 
-    private static let iso8601: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
+}
+
+/// Backend `Date.toISOString()` includes fractional seconds; mock fixtures often omit them.
+enum ISO8601Parsing {
+    static func date(from raw: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: raw) {
+            return date
+        }
+        let basic = ISO8601DateFormatter()
+        basic.formatOptions = [.withInternetDateTime]
+        return basic.date(from: raw)
+    }
 }
 
 private struct StartPayload: Encodable {

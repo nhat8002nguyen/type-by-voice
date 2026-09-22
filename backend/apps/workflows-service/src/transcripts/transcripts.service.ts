@@ -75,6 +75,7 @@ export class TranscriptsService {
       text: string;
       wordCount: number;
       audioMs: number;
+      listInHistory?: boolean;
     },
     em?: EntityManager,
   ): Promise<PublicTranscript> {
@@ -82,6 +83,8 @@ export class TranscriptsService {
     if (existing) {
       return this.toPublic(existing);
     }
+
+    const listInHistory = input.listInHistory ?? true;
 
     const row = new Transcript();
     row.id = randomUUID();
@@ -92,6 +95,7 @@ export class TranscriptsService {
     row.audioMs = input.audioMs;
     row.createdAt = new Date();
     row.deletedAt = null;
+    row.listInHistory = listInHistory;
     return this.toPublic(await this.persist(row, em));
   }
 
@@ -113,7 +117,7 @@ export class TranscriptsService {
 
   async get(userId: string, id: string): Promise<PublicTranscript | null> {
     const row = await this.findById(id);
-    if (!row || row.userId !== userId || row.deletedAt) {
+    if (!row || row.userId !== userId || row.deletedAt || !row.listInHistory) {
       return null;
     }
     return this.toPublic(row);
@@ -178,11 +182,11 @@ export class TranscriptsService {
     const repository = this.store(em);
     if (!repository) {
       return [...this.byId.values()].filter(
-        (row) => row.userId === userId && !row.deletedAt,
+        (row) => row.userId === userId && !row.deletedAt && row.listInHistory,
       );
     }
     return repository.find({
-      where: { userId, deletedAt: IsNull() },
+      where: { userId, deletedAt: IsNull(), listInHistory: true },
     });
   }
 

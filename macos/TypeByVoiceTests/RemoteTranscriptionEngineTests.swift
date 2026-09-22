@@ -112,4 +112,10 @@ final class RemoteTranscriptionEngineTests: XCTestCase {
         XCTAssertEqual(streamCount, 0)
         XCTAssertTrue(engine.deliversEventsSynchronously)
     }
+
+    func testISO8601ParsingAcceptsFractionalAndWholeSeconds() {
+        XCTAssertNotNil(ISO8601Parsing.date(from: "2026-09-29T16:37:05.350Z"))
+        XCTAssertNotNil(ISO8601Parsing.date(from: "2026-09-29T16:37:05Z"))
+        XCTAssertNil(ISO8601Parsing.date(from: "not-a-date"))
+    }
 }
