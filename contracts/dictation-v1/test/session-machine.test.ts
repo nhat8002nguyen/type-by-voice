@@ -56,6 +56,27 @@ describe('DictationSession happy path', () => {
         kind: 'transcribe',
         requestId: '3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f',
         audio: chunk,
+        listInHistory: true,
+      },
+    ]);
+  });
+
+  it('copies listInHistory false onto the transcribe output', () => {
+    const s = session();
+    const start = {
+      ...loadFixture<StartMessage>('start.valid.json'),
+      listInHistory: false,
+    };
+    s.handle({ kind: 'text', data: start });
+    const chunk = new Uint8Array([9]);
+    s.handle({ kind: 'binary', bytes: chunk });
+    const out = s.handle({ kind: 'text', data: loadFixture('stop.valid.json') });
+    expect(out).toEqual([
+      {
+        kind: 'transcribe',
+        requestId: '3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f',
+        audio: chunk,
+        listInHistory: false,
       },
     ]);
   });
