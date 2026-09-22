@@ -39,6 +39,9 @@ export function validateStart(
   if (typeof value.deviceId !== 'string' || !UUID_V4.test(value.deviceId)) {
     return fail('deviceId must be UUID v4');
   }
+  if (typeof value.listInHistory !== 'boolean') {
+    return fail('listInHistory must be boolean');
+  }
   return {
     ok: true,
     value: {
@@ -52,6 +55,7 @@ export function validateStart(
       platform: value.platform as Platform,
       clientVersion: value.clientVersion,
       deviceId: value.deviceId,
+      listInHistory: value.listInHistory,
     },
   };
 }

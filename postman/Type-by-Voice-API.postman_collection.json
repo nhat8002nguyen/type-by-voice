@@ -1,0 +1,608 @@
+{
+  "info": {
+    "_postman_id": "b7e1c4a0-2d88-4f19-8a63-0c9d1e2f3a44",
+    "name": "Type by Voice API",
+    "description": "Public HTTP + WebSocket surface of the `api` process (port 3000).\n\n**Setup**\n1. Import this collection and `local.postman_environment.json`.\n2. Select the **local** environment.\n3. Start the stack: `cd backend && docker compose up -d`.\n4. Run **Register** (first time) or **Login**. Tests copy `accessToken` / `refreshToken` into the environment.\n\nAccess JWT TTL is 15 minutes. Reuse the same `deviceId` for login and refresh of this install.\n\nAuth is limited to 10/min/IP and 5/min/email (login). Five consecutive login failures lock the account briefly.\n\nEmail verification is not required to log in. Dev mailer logs `{ type, userId, email }` only — paste tokens from the `auth_token` row in `api-db` into `emailToken` / `resetToken`.\n\nDictation audio streaming belongs in `contracts/dictation-v1` (`npm run harness`). The WebSocket request here is for handshake / JSON control frames only.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "auth": {
+        "type": "noauth"
+      },
+      "item": [
+        {
+          "name": "Hello",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/",
+            "description": "Nest default hello route."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Terminus health check. Expect `{\"status\":\"ok\"}` with a Postgres ping."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Reports ok', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "auth": {
+        "type": "noauth"
+      },
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"platform\": \"{{platform}}\",\n  \"clientVersion\": \"{{clientVersion}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/register",
+            "description": "Creates a user and issues tokens. 201 `{ accessToken, refreshToken, expiresIn }`.\n\n`platform` must be `macos` | `windows` | `ios` | `android`. `deviceId` must be UUID v4.\nUnknown identity → 400 `{ \"code\": \"invalid_request\" }`. Duplicate email → 409."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Returns tokens', () => {",
+                  "  pm.expect(body.accessToken).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.refreshToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.environment.set('accessToken', body.accessToken);",
+                  "}",
+                  "if (body.refreshToken) {",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.environment.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"platform\": \"{{platform}}\",\n  \"clientVersion\": \"{{clientVersion}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/login",
+            "description": "200 with the same token shape as register. Reuse this install's `deviceId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Returns tokens', () => {",
+                  "  pm.expect(body.accessToken).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.refreshToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.environment.set('accessToken', body.accessToken);",
+                  "}",
+                  "if (body.refreshToken) {",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.environment.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\",\n  \"platform\": \"{{platform}}\",\n  \"clientVersion\": \"{{clientVersion}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/refresh",
+            "description": "Rotates the refresh token. `platform` and `deviceId` must match the session that issued it."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.environment.set('accessToken', body.accessToken);",
+                  "}",
+                  "if (body.refreshToken) {",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.environment.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/v1/auth/logout",
+            "description": "Revokes the current device session. 204."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/forgot-password",
+            "description": "202. Token is not returned; copy it from the `auth_token` row in `api-db` into `resetToken`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{emailToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/verify-email",
+            "description": "204. Paste the verify-email token from `auth_token` into `emailToken`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/v1/auth/reset-password",
+            "description": "204. Paste the reset-password token from `auth_token` into `resetToken`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Me",
+      "item": [
+        {
+          "name": "Get profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/me",
+            "description": "`{ id, email, emailVerifiedAt }`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has email', () => {",
+                  "  pm.expect(pm.response.json().email).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get quota",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/me/quota",
+            "description": "`{ unit, limit, used, resetAt }`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has quota fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('unit');",
+                  "  pm.expect(body).to.have.property('limit');",
+                  "  pm.expect(body).to.have.property('used');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/me/sessions",
+            "description": "Active devices. Saves the first `id` to `sessionId` for revoke."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Returns an array', () => pm.expect(body).to.be.an('array'));",
+                  "if (Array.isArray(body) && body[0] && body[0].id) {",
+                  "  pm.environment.set('sessionId', body[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke session",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/me/sessions/{{sessionId}}",
+            "description": "204. Run **List sessions** first so `sessionId` is set. Revoking the current session will 401 later requests until you log in again."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Transcripts",
+      "item": [
+        {
+          "name": "List transcripts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/transcripts?limit=20",
+            "description": "Empty until a dictation `final` has been persisted. Saves the first item id to `transcriptId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const items = Array.isArray(body) ? body : body.items;",
+                  "if (Array.isArray(items) && items[0] && items[0].id) {",
+                  "  pm.environment.set('transcriptId', items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search transcripts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/transcripts?q=hello&limit=20",
+            "description": "Same route as list; `q` switches to search."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get transcript",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/transcripts/{{transcriptId}}",
+            "description": "404 when missing. Run list first, or paste an id into `transcriptId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export transcripts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v1/transcripts/export",
+            "description": "JSON export of the current user's transcripts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete transcript",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/transcripts/{{transcriptId}}",
+            "description": "204. Run list first so `transcriptId` is set."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dictation",
+      "description": "WebSocket `{{wsUrl}}`. Upgrade uses `Authorization: Bearer {{accessToken}}`.\n\nClose codes: 4401 unauthenticated, 4403 quota exhausted, 4429 rate limited.\n\nAfter connect, send the **start** JSON text frame, wait for `ready`, then binary Ogg Opus. Postman is a poor fit for streaming audio — use `contracts/dictation-v1` (`DICTATE_TOKEN=<accessToken> npm run harness`) for a live session.\n\n`platform`, `clientVersion`, and `deviceId` on `start` must match the auth session.",
+      "item": [
+        {
+          "name": "Dictate session",
+          "protocol": "websocket",
+          "url": "{{wsUrl}}",
+          "header": [
+            {
+              "key": "Authorization",
+              "value": "Bearer {{accessToken}}",
+              "type": "text"
+            }
+          ],
+          "messages": [
+            {
+              "name": "start",
+              "type": "text",
+              "language": "json",
+              "payload": "{\n  \"type\": \"start\",\n  \"requestId\": \"{{requestId}}\",\n  \"codec\": \"opus\",\n  \"container\": \"ogg\",\n  \"sampleRate\": 16000,\n  \"channels\": 1,\n  \"language\": \"en\",\n  \"platform\": \"{{platform}}\",\n  \"clientVersion\": \"{{clientVersion}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            {
+              "name": "stop",
+              "type": "text",
+              "language": "json",
+              "payload": "{\n  \"type\": \"stop\",\n  \"requestId\": \"{{requestId}}\",\n  \"durationMs\": 11800\n}"
+            },
+            {
+              "name": "cancel",
+              "type": "text",
+              "language": "json",
+              "payload": "{\n  \"type\": \"cancel\",\n  \"requestId\": \"{{requestId}}\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -24,7 +24,7 @@ export type SessionEvent =
 export type SessionOutput =
   | { kind: 'send'; message: ReadyMessage | FinalMessage | ErrorMessage }
   | { kind: 'close'; code: number; reason: string }
-  | { kind: 'transcribe'; requestId: string; audio: Uint8Array };
+  | { kind: 'transcribe'; requestId: string; audio: Uint8Array; listInHistory: boolean };
 
 export interface SessionIdentity {
   userId: string;
@@ -96,6 +96,7 @@ function isRecord(data: unknown): data is Record<string, unknown> {
 export class DictationSession {
   #status: SessionStatus = 'open';
   #requestId: string | undefined;
+  #listInHistory: boolean | undefined;
   #audioChunks: Uint8Array[] = [];
   #readyAtMs: number | undefined;
   #lastAudioAtMs: number | undefined;
@@ -243,6 +244,7 @@ export class DictationSession {
       return this.error('invalid_request', start.requestId);
     }
     this.#requestId = start.requestId;
+    this.#listInHistory = start.listInHistory;
     this.#audioChunks = [];
     this.#readyAtMs = this.#nowMs();
     this.#lastAudioAtMs = undefined;
@@ -270,12 +272,16 @@ export class DictationSession {
         maxDurationMs: this.#maxDurationMs,
       });
     }
+    if (this.#listInHistory === undefined) {
+      return this.error('invalid_request', this.#requestId);
+    }
     this.#status = 'stopping';
     return [
       {
         kind: 'transcribe',
         requestId: this.#requestId,
         audio,
+        listInHistory: this.#listInHistory,
       },
     ];
   }
