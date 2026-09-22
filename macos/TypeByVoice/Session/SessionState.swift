@@ -18,4 +18,9 @@ struct SessionTimeouts: Equatable {
     var transcribing: TimeInterval = 15
     var inserting: TimeInterval = 2
     var recordingHardCap: TimeInterval = 120
+    var silenceDurationMs: Int = 3_000
+    var noSpeechTimeoutMs: Int = 10_000
+    var minDurationMs: Int = 400
+    var trailingHangoverMs: Int = 100
+    var warmSocketSeconds: TimeInterval = 60
 }

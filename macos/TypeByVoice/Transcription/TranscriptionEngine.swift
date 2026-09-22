@@ -14,6 +14,9 @@ protocol TranscriptionEngine: AnyObject {
 
     /// Outbound audio path that may complete synchronously (test doubles).
     func sendAudioNow(_ data: Data)
+
+    /// Keep the socket warm until the given deadline after a completed dictation.
+    func keepWarm(until: Date)
 }
 
 extension TranscriptionEngine {
@@ -24,6 +27,8 @@ extension TranscriptionEngine {
     func sendAudioNow(_ data: Data) {
         Task { await sendAudio(data) }
     }
+
+    func keepWarm(until: Date) {}
 }
 
 enum EngineEvent: Equatable {

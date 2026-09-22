@@ -6,6 +6,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var startCalled = false
     private(set) var stopCalled = false
     private(set) var cancelCalled = false
+    private(set) var warmUntil: Date?
     private(set) var lastRequestId: UUID?
     private(set) var lastIdentity: ClientIdentity?
 
@@ -46,6 +47,10 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
 
     func cancel() async {
         cancelCalled = true
+    }
+
+    func keepWarm(until: Date) {
+        warmUntil = until
     }
 
     func emitReady(
