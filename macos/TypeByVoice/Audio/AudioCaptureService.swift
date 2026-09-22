@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 final class AudioCaptureService: AudioCaptureStarting {
-    private let engine = AVAudioEngine()
+    private var engine: AVAudioEngine?
     private var ringBuffer = AudioRingBuffer(capacitySamples: 16_000 * 120)
     private var isTapInstalled = false
     private var isPrepared = false
@@ -13,12 +13,16 @@ final class AudioCaptureService: AudioCaptureStarting {
 
     private let targetSampleRate: Double = 16_000
 
-    init() {
-        prepareEngine()
+    init(prepareImmediately: Bool = true) {
+        if prepareImmediately {
+            prepareEngine()
+        }
     }
 
     func prepareEngine() {
         guard !isPrepared else { return }
+        let engine = AVAudioEngine()
+        self.engine = engine
         _ = engine.inputNode
         engine.prepare()
         isPrepared = true
@@ -26,7 +30,7 @@ final class AudioCaptureService: AudioCaptureStarting {
 
     func startCapture() {
         prepareEngine()
-        guard !isTapInstalled else { return }
+        guard let engine, !isTapInstalled else { return }
 
         let input = engine.inputNode
         let inputFormat = input.inputFormat(forBus: 0)
@@ -64,6 +68,7 @@ final class AudioCaptureService: AudioCaptureStarting {
     }
 
     func stopCapture() {
+        guard let engine else { return }
         if isTapInstalled {
             engine.inputNode.removeTap(onBus: 0)
             isTapInstalled = false

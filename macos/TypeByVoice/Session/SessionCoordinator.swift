@@ -4,7 +4,9 @@ import Foundation
 final class SessionCoordinator {
     private(set) var state: SessionState = .idle
     private(set) var lastError: SessionError?
+    private(set) var lastQuota: QuotaSnapshot?
     var onStateChange: ((SessionState) -> Void)?
+    var onQuotaChange: ((QuotaSnapshot) -> Void)?
 
     var isListeningUI: Bool { state == .recording }
 
@@ -288,11 +290,13 @@ final class SessionCoordinator {
 
     private func handleEngineEvent(_ event: EngineEvent) {
         switch event {
-        case .ready:
+        case let .ready(_, quota):
+            publishQuota(quota)
             guard state == .connecting else { return }
             hasReady = true
             promoteToRecordingIfNeeded()
-        case let .final(text, _, _, _):
+        case let .final(text, _, _, quota):
+            publishQuota(quota)
             guard state == .transcribing else { return }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
@@ -311,6 +315,11 @@ final class SessionCoordinator {
         case let .error(code, message, _, _):
             failToIdle(code: code, message: message)
         }
+    }
+
+    private func publishQuota(_ quota: QuotaSnapshot) {
+        lastQuota = quota
+        onQuotaChange?(quota)
     }
 
     private func startEventLoopIfNeeded() {

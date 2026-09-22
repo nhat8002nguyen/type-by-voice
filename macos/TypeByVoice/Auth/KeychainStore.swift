@@ -7,6 +7,17 @@ protocol KeychainStoring: AnyObject {
     var refreshToken: String? { get set }
 }
 
+@MainActor
+final class InMemoryKeychain: KeychainStoring {
+    var accessToken: String?
+    var refreshToken: String?
+
+    init(accessToken: String? = nil, refreshToken: String? = nil) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+    }
+}
+
 enum KeychainStoreError: Error {
     case unexpectedData
     case unhandledStatus(OSStatus)

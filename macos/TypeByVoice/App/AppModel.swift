@@ -18,6 +18,7 @@ final class AppModel: ObservableObject {
     let hotkey: HotkeyService
     let audioCapture: AudioCaptureService
 
+    private let engine: RemoteTranscriptionEngine
     private let coordinator: SessionCoordinator
     private var lastQuota: QuotaSnapshot?
     private var recordingStartedAt: Date?
@@ -30,21 +31,39 @@ final class AppModel: ObservableObject {
         settings: SettingsStore = .load(),
         hotkey: HotkeyService = HotkeyService(),
         overlay: OverlayController = OverlayController(),
-        audioCapture: AudioCaptureService = AudioCaptureService(),
+        audioCapture: AudioCaptureService = AudioCaptureService(
+            prepareImmediately: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
+        ),
         engineURL: URL = URL(string: ProcessInfo.processInfo.environment["TBV_DICTATE_URL"]
             ?? "ws://127.0.0.1:8080/v1/dictate")!,
         apiBaseURL: URL = URL(string: ProcessInfo.processInfo.environment["TBV_API_URL"]
             ?? "http://127.0.0.1:8080")!
     ) {
-        let keychain = KeychainStore()
-        let deviceId = keychain.loadOrCreateDeviceId()
-        let resolvedAuth = authStore ?? AuthStore(
-            http: URLSessionAuthHTTPClient(baseURL: apiBaseURL),
-            keychain: keychain,
-            deviceId: deviceId,
-            clientVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-                ?? "1.0.0+12"
-        )
+        let runningUnderXCTest =
+            ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
+        let resolvedAuth: AuthStore
+        if let authStore {
+            resolvedAuth = authStore
+        } else if runningUnderXCTest {
+            // Avoid SecItemCopyMatching during XCTest host launch (can hang waiting on securityd).
+            resolvedAuth = AuthStore(
+                http: URLSessionAuthHTTPClient(baseURL: apiBaseURL),
+                keychain: InMemoryKeychain(),
+                deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!,
+                clientVersion: "1.0.0+12"
+            )
+        } else {
+            let keychain = KeychainStore()
+            let deviceId = keychain.loadOrCreateDeviceId()
+            resolvedAuth = AuthStore(
+                http: URLSessionAuthHTTPClient(baseURL: apiBaseURL),
+                keychain: keychain,
+                deviceId: deviceId,
+                clientVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+                    ?? "1.0.0+12"
+            )
+        }
         self.authStore = resolvedAuth
         self.permissions = permissions
         self.settings = settings
@@ -61,12 +80,12 @@ final class AppModel: ObservableObject {
             restoreDelayMs: settings.clipboardRestoreDelayMs
         )
 
-        let token = resolvedAuth.accessToken ?? ""
         let engine = RemoteTranscriptionEngine(
             url: engineURL,
-            token: token,
+            token: resolvedAuth.accessToken ?? "",
             identity: resolvedAuth.clientIdentity
         )
+        self.engine = engine
 
         let timeouts = SessionTimeouts(
             recordingHardCap: TimeInterval(settings.hardCapMs) / 1_000,
@@ -89,14 +108,19 @@ final class AppModel: ObservableObject {
         coordinator.onStateChange = { [weak self] state in
             self?.handleStateChange(state)
         }
+        coordinator.onQuotaChange = { [weak self] quota in
+            self?.applyQuota(quota)
+        }
 
         overlay.onRetry = { [weak self] in
             self?.coordinator.hotkeyPressed()
         }
 
-        applyLaunchAtLogin(settings.launchAtLogin)
-        registerHotkey()
-        startTickLoop()
+        if !runningUnderXCTest {
+            applyLaunchAtLogin(settings.launchAtLogin)
+            registerHotkey()
+            startTickLoop()
+        }
     }
 
     func startOrStop() {
@@ -121,6 +145,22 @@ final class AppModel: ObservableObject {
         applyLaunchAtLogin(enabled)
     }
 
+    @discardableResult
+    func updateHotkey(keyCode: UInt32, modifiers: UInt32) -> Bool {
+        var next = settings
+        guard next.applyRecordedHotkey(keyCode: keyCode, modifiers: modifiers) else {
+            return false
+        }
+        next.save()
+        settings = next
+        registerHotkey()
+        return true
+    }
+
+    func syncEngineCredentials() {
+        engine.updateAccessToken(authStore.accessToken ?? "")
+    }
+
     func handleUnauthenticated() async {
         guard !unauthenticatedRefreshUsed else {
             needsLogin = true
@@ -130,8 +170,7 @@ final class AppModel: ObservableObject {
         unauthenticatedRefreshUsed = true
         do {
             try await authStore.refreshIfNeeded()
-            // Minimal reconnect: toggle session again with refreshed token.
-            // Full engine token swap lands in Task 11 error matrix.
+            syncEngineCredentials()
             coordinator.hotkeyPressed()
         } catch {
             needsLogin = true
@@ -170,6 +209,12 @@ final class AppModel: ObservableObject {
         } catch {
             // SMAppService may fail outside a signed/notarized build; ignore for local runs.
         }
+    }
+
+    private func applyQuota(_ quota: QuotaSnapshot) {
+        lastQuota = quota
+        updateQuotaText()
+        refreshOverlay()
     }
 
     private func handleStateChange(_ state: SessionState) {

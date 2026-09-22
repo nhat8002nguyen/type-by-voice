@@ -3,7 +3,7 @@ import Foundation
 @MainActor
 final class RemoteTranscriptionEngine: TranscriptionEngine {
     private let url: URL
-    private let token: String
+    private(set) var accessToken: String
 
     private var session: URLSession?
     private var task: URLSessionWebSocketTask?
@@ -23,8 +23,12 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
 
     init(url: URL, token: String, identity: ClientIdentity) {
         self.url = url
-        self.token = token
+        self.accessToken = token
         _ = identity
+    }
+
+    func updateAccessToken(_ token: String) {
+        accessToken = token
     }
 
     func setEventHandler(_ handler: (@MainActor (EngineEvent) -> Void)?) {
@@ -38,7 +42,7 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
         pendingAudio = []
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
         let session = URLSession(configuration: .default)
         self.session = session

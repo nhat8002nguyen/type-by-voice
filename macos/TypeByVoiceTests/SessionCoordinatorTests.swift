@@ -165,6 +165,38 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(engine.warmUntil, clock.now.addingTimeInterval(60))
     }
 
+    func testReadyAndFinalPublishQuota() async {
+        let readyQuota = QuotaSnapshot(
+            unit: "words",
+            limit: 1_000,
+            used: 100,
+            resetAt: Date(timeIntervalSince1970: 1)
+        )
+        let finalQuota = QuotaSnapshot(
+            unit: "words",
+            limit: 1_000,
+            used: 250,
+            resetAt: Date(timeIntervalSince1970: 2)
+        )
+
+        let clock = Clock(now: Date(timeIntervalSince1970: 0))
+        let engine = FakeTranscriptionEngine()
+        let coordinator = SessionCoordinator(engine: engine, inserter: FakeInserter(), clock: clock)
+        var seen: [QuotaSnapshot] = []
+        coordinator.onQuotaChange = { seen.append($0) }
+
+        coordinator.hotkeyPressed()
+        coordinator.micFrame(samples: [0.1])
+        engine.emitReady(quota: readyQuota)
+        XCTAssertEqual(coordinator.lastQuota, readyQuota)
+
+        clock.now = clock.now.addingTimeInterval(0.5)
+        coordinator.hotkeyPressed()
+        engine.emitFinal(text: "hello world", quota: finalQuota)
+        XCTAssertEqual(coordinator.lastQuota, finalQuota)
+        XCTAssertEqual(seen, [readyQuota, finalQuota])
+    }
+
     private func makeRecording(
         engine: FakeTranscriptionEngine,
         inserter: TextInserter = FakeInserter(),

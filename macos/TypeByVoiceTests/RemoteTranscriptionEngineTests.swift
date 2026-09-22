@@ -33,4 +33,15 @@ final class RemoteTranscriptionEngineTests: XCTestCase {
         XCTAssertEqual(text, "the transcribed text")
         XCTAssertEqual(wordCount, 3)
     }
+
+    func testUpdateAccessTokenIsUsedOnNextStart() async throws {
+        let engine = RemoteTranscriptionEngine(
+            url: URL(string: "ws://127.0.0.1:9/v1/dictate")!,
+            token: "stale",
+            identity: .preview
+        )
+        XCTAssertEqual(engine.accessToken, "stale")
+        engine.updateAccessToken("fresh-token")
+        XCTAssertEqual(engine.accessToken, "fresh-token")
+    }
 }

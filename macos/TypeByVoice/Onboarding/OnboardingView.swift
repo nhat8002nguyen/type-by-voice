@@ -59,8 +59,12 @@ struct OnboardingView: View {
             case .hotkey:
                 Text("Choose your hotkey")
                     .font(.headline)
-                Text("⌘⇧D (default)")
-                    .monospaced()
+                HotkeyRecorderControl(
+                    currentLabel: model.settings.hotkeyDisplayLabel,
+                    onRecorded: { keyCode, modifiers in
+                        model.updateHotkey(keyCode: keyCode, modifiers: modifiers)
+                    }
+                )
                 Toggle("Launch at login", isOn: Binding(
                     get: { model.settings.launchAtLogin },
                     set: { model.setLaunchAtLogin($0) }
@@ -110,6 +114,7 @@ struct OnboardingView: View {
             } else {
                 try await model.authStore.login(email: email, password: password)
             }
+            model.syncEngineCredentials()
             step = .microphone
         } catch {
             authError = error.localizedDescription
@@ -123,7 +128,12 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Hotkey") {
-                Text("Default: ⌘⇧D")
+                HotkeyRecorderControl(
+                    currentLabel: model.settings.hotkeyDisplayLabel,
+                    onRecorded: { keyCode, modifiers in
+                        model.updateHotkey(keyCode: keyCode, modifiers: modifiers)
+                    }
+                )
                 Text("Silence duration: \(model.settings.silenceDurationMs) ms")
                 Text("Hard cap: \(model.settings.hardCapMs) ms")
             }
@@ -137,7 +147,10 @@ struct SettingsView: View {
                 if model.authStore.accessToken != nil {
                     Text("Signed in")
                     Button("Sign out") {
-                        Task { try? await model.authStore.logout() }
+                        Task {
+                            try? await model.authStore.logout()
+                            model.syncEngineCredentials()
+                        }
                     }
                 } else {
                     Text("Not signed in")
