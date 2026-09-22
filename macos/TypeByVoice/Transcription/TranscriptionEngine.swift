@@ -52,6 +52,6 @@ struct ClientIdentity: Equatable {
     static let preview = ClientIdentity(
         platform: "macos",
         clientVersion: "1.0.0+12",
-        deviceId: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!
     )
 }
