@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
@@ -28,7 +29,9 @@ final class ClipboardPasteInserter: TextInserter {
     private let poster: KeyEventPosting
     private let notifications: UserNotifying
     private let accessibilityGranted: () -> Bool
+    private let focus: InsertionFocusing
     private let restoreDelayMs: Int
+    private var didPromptAccessibility = false
 
     private(set) var lastMode: InsertionMode?
 
@@ -37,18 +40,21 @@ final class ClipboardPasteInserter: TextInserter {
         poster: KeyEventPosting = SystemKeyEventPoster(),
         notifications: UserNotifying = SystemUserNotifier(),
         accessibilityGranted: @escaping () -> Bool,
-        restoreDelayMs: Int = 150
+        focus: InsertionFocusing = FrontmostAppFocuser(),
+        restoreDelayMs: Int = 250
     ) {
         self.pasteboard = pasteboard
         self.poster = poster
         self.notifications = notifications
         self.accessibilityGranted = accessibilityGranted
+        self.focus = focus
         self.restoreDelayMs = restoreDelayMs
     }
 
     func insert(_ text: String) async {
         if accessibilityGranted() {
             lastMode = .paste
+            await focus.restoreFrontmostApp()
             let saved = pasteboard.snapshot()
             pasteboard.string = text
             postCommandV()
@@ -59,7 +65,20 @@ final class ClipboardPasteInserter: TextInserter {
         } else {
             lastMode = .clipboardFallback
             pasteboard.string = text
-            notifications.notify(body: "Transcript copied. Press ⌘V to paste.")
+            promptAccessibilityIfNeeded()
+            notifications.notify(
+                body: "Transcript copied — press ⌘V. Enable Accessibility for auto-paste."
+            )
+        }
+    }
+
+    private func promptAccessibilityIfNeeded() {
+        guard !didPromptAccessibility else { return }
+        didPromptAccessibility = true
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -133,14 +152,17 @@ final class SystemKeyEventPoster: KeyEventPosting {
 
 final class SystemUserNotifier: UserNotifying {
     func notify(body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = "Type by Voice"
-        content.body = body
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
-        UNUserNotificationCenter.current().add(request)
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in
+            let content = UNMutableNotificationContent()
+            content.title = "Type by Voice"
+            content.body = body
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+            center.add(request)
+        }
     }
 }

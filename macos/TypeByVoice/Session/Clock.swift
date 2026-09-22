@@ -1,9 +1,15 @@
 import Foundation
 
+/// Wall-clock source for session timeouts. Pass an explicit `now` to freeze time in tests.
 final class Clock: @unchecked Sendable {
-    var now: Date
+    private var frozen: Date?
 
-    init(now: Date = Date()) {
-        self.now = now
+    init(now: Date? = nil) {
+        self.frozen = now
+    }
+
+    var now: Date {
+        get { frozen ?? Date() }
+        set { frozen = newValue }
     }
 }

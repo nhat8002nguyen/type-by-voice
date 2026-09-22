@@ -81,8 +81,10 @@ final class AppModel: ObservableObject {
             accessibilityGranted: { [permissions] in
                 permissions.isAccessibilityGranted
             },
+            focus: FrontmostAppFocuser(),
             restoreDelayMs: settings.clipboardRestoreDelayMs
         )
+
 
         let engine = transcriptionEngine ?? RemoteTranscriptionEngine(
             url: engineURL,
@@ -162,6 +164,7 @@ final class AppModel: ObservableObject {
     func didAuthenticate() {
         clearUnauthenticatedEpisode()
         syncEngineCredentials()
+        objectWillChange.send()
     }
 
     func completeOnboarding() {
@@ -169,6 +172,17 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.set(true, forKey: "app.typebyvoice.onboardingComplete")
         showOnboarding = false
         registerHotkey()
+    }
+
+    func signOut() async {
+        try? await authStore.logout()
+        syncEngineCredentials()
+        needsLogin = true
+        showOnboarding = true
+    }
+
+    var showsWelcome: Bool {
+        showOnboarding || authStore.accessToken == nil
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -195,8 +209,7 @@ final class AppModel: ObservableObject {
 
     func handleUnauthenticated() async {
         guard !unauthenticatedRefreshUsed else {
-            needsLogin = true
-            showOnboarding = true
+            await forceReauthenticate()
             return
         }
         unauthenticatedRefreshUsed = true
@@ -205,9 +218,15 @@ final class AppModel: ObservableObject {
             syncEngineCredentials()
             coordinator.hotkeyPressed()
         } catch {
-            needsLogin = true
-            showOnboarding = true
+            await forceReauthenticate()
         }
+    }
+
+    private func forceReauthenticate() async {
+        try? await authStore.logout()
+        syncEngineCredentials()
+        needsLogin = true
+        showOnboarding = true
     }
 
     private func clearUnauthenticatedEpisode() {
