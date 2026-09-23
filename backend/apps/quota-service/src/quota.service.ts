@@ -164,6 +164,7 @@ export class QuotaService {
     this.adjustments.push(adjustment);
   }
 
+  /** runExclusive serializes async writers so commit mutations cannot interleave. */
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.writeQueue.then(fn, fn);
     this.writeQueue = run.then(
