@@ -6,6 +6,7 @@ import { ClientRegistration } from './tracing-client.types.js';
 
 @Module({})
 export class NatsClientModule {
+  /** register builds a Nest dynamic module for a traced NATS ClientProxy. */
   static register(registrations: ClientRegistration[]): DynamicModule {
     const servers = [process.env.NATS_SERVER_HOST ?? 'nats-server:4222'];
 

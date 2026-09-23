@@ -18,6 +18,7 @@ import { OutboxService } from './outbox.service.js';
 
 @Module({})
 export class OutboxModule {
+  /** forFeature wires Nest module providers for a target client token. */
   static forFeature(): DynamicModule {
     return {
       module: OutboxModule,
@@ -66,6 +67,7 @@ export class OutboxModule {
   }
 }
 
+/** resolveClient resolves the ClientProxy injection for an outbox feature registration. */
 function resolveClient(
   moduleRef: ModuleRef,
   clientToken: string | symbol,

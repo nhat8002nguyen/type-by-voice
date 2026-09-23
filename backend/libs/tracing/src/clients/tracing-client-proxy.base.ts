@@ -35,10 +35,12 @@ export abstract class TracingClientProxyBase implements TracingClientProxy {
     return this.client.emit<TResult>(pattern, this.traced(data));
   }
 
+  /** traced wraps a ClientProxy send/emit under the active trace id. */
   private traced(data: unknown): unknown {
     const traceId = this.traceContext.getTraceId();
     return traceId ? this.attachTraceId(data, traceId) : data;
   }
 
+  /** attachTraceId injects the active trace id into outbound message metadata. */
   protected abstract attachTraceId(data: unknown, traceId: string): unknown;
 }

@@ -12,6 +12,7 @@ export class RmqClientProxy extends TracingClientProxyBase {
     super(client, traceContext, inquirer, 'rmq');
   }
 
+  /** attachTraceId injects the active trace id into outbound RMQ message metadata. */
   protected attachTraceId(data: unknown, traceId: string): RmqRecord {
     const record = data instanceof RmqRecord ? data : new RmqRecord(data);
     return new RmqRecord(record.data, {

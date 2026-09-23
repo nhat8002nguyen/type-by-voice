@@ -27,6 +27,7 @@ export class OutboxProcessor {
   ) {}
 
   @Cron(CronExpression.EVERY_10_SECONDS)
+  /** processOutbox claims pending rows and emits to the configured ClientProxy routes. */
   async processOutbox() {
     this.logger.log('Processing outbox messages');
 
@@ -47,6 +48,7 @@ export class OutboxProcessor {
     }
   }
 
+  /** dispatchWorkflowEvent emits one outbox payload on the workflows client route. */
   async dispatchWorkflowEvent(message: Outbox) {
     const messageId = `outbox:${message.id}`;
     this.logger.log(
@@ -58,12 +60,14 @@ export class OutboxProcessor {
     await lastValueFrom(this.clientFor(message).emit(message.type, record));
   }
 
+  /** resolveRoutes maps outbox target tokens to ClientProxy instances. */
   private resolveRoutes(): OutboxRoute[] {
     return this.routes?.length
       ? this.routes
       : [{ target: this.target, client: this.client }];
   }
 
+  /** clientFor returns the ClientProxy registered for an outbox target token. */
   private clientFor(message: Outbox): ClientProxy {
     if (!message.target) {
       return this.client;

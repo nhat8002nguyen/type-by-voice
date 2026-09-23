@@ -18,6 +18,7 @@ export class NatsClientProxy extends TracingClientProxyBase {
     super(client, traceContext, inquirer, 'nats');
   }
 
+  /** attachTraceId injects the active trace id into outbound NATS message metadata. */
   protected attachTraceId(data: unknown, traceId: string): TracedNatsRecord {
     const record: TracedNatsRecord =
       data instanceof NatsRecord

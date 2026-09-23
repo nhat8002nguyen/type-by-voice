@@ -9,6 +9,7 @@ export interface RpcContextLike {
   getMessage?: () => { properties?: { headers?: Record<string, unknown> } };
 }
 
+/** extractTraceIdFromHttpRequest reads a trace id from inbound HTTP headers. */
 export function extractTraceIdFromHttpRequest(
   request: HttpRequestLike | undefined,
 ): string | undefined {
@@ -16,6 +17,7 @@ export function extractTraceIdFromHttpRequest(
   return normalize(Array.isArray(value) ? value[0] : value);
 }
 
+/** extractTraceIdFromRpcContext reads a trace id from microservice RPC metadata. */
 export function extractTraceIdFromRpcContext(
   context: RpcContextLike | undefined,
 ): string | undefined {
@@ -28,6 +30,7 @@ export function extractTraceIdFromRpcContext(
   return normalize(rmqHeaders?.[TRACE_ID_HEADER]);
 }
 
+/** normalize trims and validates a candidate trace id string. */
 function normalize(value: unknown): string | undefined {
   if (Buffer.isBuffer(value)) {
     return normalize(value.toString());

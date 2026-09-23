@@ -17,12 +17,14 @@ export type OutboxRoute = {
   client: ClientProxy;
 };
 
+/** outboxTargetName builds a Nest injection token name for an outbox target. */
 export function outboxTargetName(target: string | symbol): string {
   return typeof target === 'symbol'
     ? (target.description ?? String(target))
     : target;
 }
 
+/** normalizeOutboxRegisterOptions normalizes forFeature/register options into a stable shape. */
 export function normalizeOutboxRegisterOptions(
   options: OutboxModuleRegisterOptions,
 ): OutboxRegisterOptions[] {
