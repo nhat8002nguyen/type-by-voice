@@ -13,11 +13,13 @@ export class QuotaController {
   constructor(private readonly quotaService: QuotaService) {}
 
   @MessagePattern(QUOTA_CHECK_PATTERN)
+  /** check handles quota.check NATS RPC. */
   check(@Payload() dto: CheckQuotaRequestDto) {
     return this.quotaService.checkFor(dto);
   }
 
   @MessagePattern(QUOTA_COMMIT_PATTERN)
+  /** commit handles quota.commit NATS RPC. */
   commit(@Payload() dto: CommitQuotaRequestDto) {
     return this.quotaService.commit(dto, new Date());
   }
