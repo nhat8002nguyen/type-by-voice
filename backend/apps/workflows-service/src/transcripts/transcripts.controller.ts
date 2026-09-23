@@ -67,6 +67,7 @@ export class TranscriptsController {
   ) {}
 
   @EventPattern(WORKFLOWS_CREATE_EVENT)
+  /** create handles workflows transcript create RPC/inbox-facing create. */
   async create(
     @Payload() dto: CreateTranscriptDto,
     @Ctx() context: RmqContext,
@@ -100,6 +101,7 @@ export class TranscriptsController {
   }
 
   @MessagePattern(TRANSCRIPTS_LIST_PATTERN)
+  /** list handles listing a user's transcripts. */
   list(@Payload() dto: TranscriptsListDto) {
     return this.transcriptsService.list(dto.userId, {
       cursor: dto.cursor,
@@ -108,21 +110,25 @@ export class TranscriptsController {
   }
 
   @MessagePattern(TRANSCRIPTS_GET_PATTERN)
+  /** get handles fetching one transcript by id. */
   get(@Payload() dto: TranscriptsGetDto) {
     return this.transcriptsService.get(dto.userId, dto.id);
   }
 
   @MessagePattern(TRANSCRIPTS_DELETE_PATTERN)
+  /** delete handles soft-deleting one transcript. */
   delete(@Payload() dto: TranscriptsGetDto) {
     return this.transcriptsService.delete(dto.userId, dto.id);
   }
 
   @MessagePattern(TRANSCRIPTS_DELETE_ALL_PATTERN)
+  /** deleteAll handles soft-deleting all of a user's transcripts. */
   deleteAll(@Payload() dto: TranscriptsUserDto) {
     return this.transcriptsService.deleteAll(dto.userId);
   }
 
   @MessagePattern(TRANSCRIPTS_SEARCH_PATTERN)
+  /** search handles transcript search for a user query window. */
   search(@Payload() dto: TranscriptsSearchDto) {
     return this.transcriptsService.search(dto.userId, dto.q, {
       cursor: dto.cursor,
@@ -131,6 +137,7 @@ export class TranscriptsController {
   }
 
   @MessagePattern(TRANSCRIPTS_EXPORT_PATTERN)
+  /** export handles exporting a user's visible transcript history. */
   export(@Payload() dto: TranscriptsUserDto) {
     return this.transcriptsService.export(dto.userId);
   }

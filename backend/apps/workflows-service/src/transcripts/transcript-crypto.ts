@@ -4,6 +4,7 @@ const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 const ALGORITHM = 'aes-256-gcm';
 
+/** encryptTranscript seals plaintext under the configured key for DB storage. */
 export function encryptTranscript(plain: string, key: Buffer): Buffer {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
@@ -15,6 +16,7 @@ export function encryptTranscript(plain: string, key: Buffer): Buffer {
   return Buffer.concat([iv, tag, ciphertext]);
 }
 
+/** decryptTranscript opens stored ciphertext back to plaintext for authorized reads. */
 export function decryptTranscript(blob: Buffer, key: Buffer): string {
   const iv = blob.subarray(0, IV_LENGTH);
   const tag = blob.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
