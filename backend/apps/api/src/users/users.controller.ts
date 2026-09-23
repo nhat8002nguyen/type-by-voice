@@ -18,17 +18,20 @@ export class UsersController {
   constructor(private readonly authService: AuthService) {}
 
   @Get()
+  /** me returns the authenticated user profile. */
   me(@CurrentUser() user: RequestUser) {
     return this.authService.getMe(user.id);
   }
 
   @Get('sessions')
+  /** listSessions lists active device sessions for the current user. */
   listSessions(@CurrentUser() user: RequestUser) {
     return this.authService.listSessions(user.id);
   }
 
   @Delete('sessions/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  /** revokeSession revokes one device session owned by the current user. */
   revokeSession(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.authService.revokeSession(user.id, id);
   }
