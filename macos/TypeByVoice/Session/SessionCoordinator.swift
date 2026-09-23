@@ -22,6 +22,7 @@ final class SessionCoordinator {
     private var hasMicFrames = false
     private var hasReady = false
     private var preReadyAudio: [Data] = []
+    private var heldSilencePages: [(data: Data, durationMs: Int)] = []
     private var connectingStartedAt: Date?
     private var recordingStartedAt: Date?
     private var transcribingStartedAt: Date?
@@ -91,9 +92,14 @@ final class SessionCoordinator {
         }
 
         let pages = encoder.encode(samples: samples)
+        let isSilent = !silenceDetector.isSpeech(samples)
+        let frameDurationMs = samples.isEmpty
+            ? 0
+            : max(1, samples.count * 1_000 / Self.sampleRate)
+
         for page in pages where !page.isEmpty {
             if state == .recording {
-                transmitAudio(page)
+                enqueueEncodedPage(page, isSilent: isSilent, durationMs: frameDurationMs / max(pages.count, 1))
             } else {
                 preReadyAudio.append(page)
             }
@@ -133,6 +139,7 @@ final class SessionCoordinator {
         hasMicFrames = false
         hasReady = false
         preReadyAudio = []
+        heldSilencePages = []
         connectingStartedAt = clock.now
         recordingStartedAt = nil
         transcribingStartedAt = nil
@@ -176,6 +183,41 @@ final class SessionCoordinator {
         }
     }
 
+    private func enqueueEncodedPage(_ data: Data, isSilent: Bool, durationMs: Int) {
+        if isSilent {
+            heldSilencePages.append((data, max(durationMs, 1)))
+            return
+        }
+        flushHeldSilence(trimmingTrailing: false)
+        transmitAudio(data)
+    }
+
+    private func flushHeldSilence(trimmingTrailing: Bool) {
+        let pages: [(data: Data, durationMs: Int)]
+        if trimmingTrailing {
+            pages = trimmedTrailingHangover(from: heldSilencePages)
+        } else {
+            pages = heldSilencePages
+        }
+        heldSilencePages = []
+        for page in pages {
+            transmitAudio(page.data)
+        }
+    }
+
+    private func trimmedTrailingHangover(
+        from pages: [(data: Data, durationMs: Int)]
+    ) -> [(data: Data, durationMs: Int)] {
+        var kept: [(data: Data, durationMs: Int)] = []
+        var keptMs = 0
+        for page in pages {
+            if keptMs >= timeouts.trailingHangoverMs { break }
+            kept.append(page)
+            keptMs += page.durationMs
+        }
+        return kept
+    }
+
     private func transmitAudio(_ data: Data) {
         engine.sendAudioNow(data)
     }
@@ -210,6 +252,7 @@ final class SessionCoordinator {
     private func beginTranscribing() {
         guard state == .recording else { return }
         audioCapture.stopCapture()
+        flushHeldSilence(trimmingTrailing: true)
         let eos = encoder.finish()
         if !eos.isEmpty {
             transmitAudio(eos)
@@ -226,6 +269,7 @@ final class SessionCoordinator {
     private func cancelSession() {
         audioCapture.stopCapture()
         preReadyAudio = []
+        heldSilencePages = []
         hasMicFrames = false
         hasReady = false
         connectingStartedAt = nil
@@ -242,6 +286,7 @@ final class SessionCoordinator {
         lastError = SessionError(code: code, message: message, retryable: retryable)
         audioCapture.stopCapture()
         preReadyAudio = []
+        heldSilencePages = []
         hasMicFrames = false
         hasReady = false
         connectingStartedAt = nil

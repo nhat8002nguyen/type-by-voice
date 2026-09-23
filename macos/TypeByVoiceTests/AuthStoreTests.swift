@@ -97,4 +97,36 @@ final class AuthStoreTests: XCTestCase {
         XCTAssertTrue(didThrow)
         XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
     }
+
+    func testLoginMaps401ToInvalidCredentialsMessage() async {
+        let http = FakeHTTP()
+        http.statusSequence = [401]
+        let store = AuthStore(http: http, keychain: FakeKeychain(), deviceId: UUID())
+        do {
+            try await store.login(email: "a@b.co", password: "wrong")
+            XCTFail("expected throw")
+        } catch let error as AuthStoreError {
+            XCTAssertEqual(error, .invalidCredentials)
+            XCTAssertEqual(
+                error.errorDescription,
+                "Email or password is incorrect, or no account exists with that email."
+            )
+        } catch {
+            XCTFail("unexpected \(error)")
+        }
+    }
+
+    func testRegisterMaps409ToEmailAlreadyRegistered() async {
+        let http = FakeHTTP()
+        http.statusSequence = [409]
+        let store = AuthStore(http: http, keychain: FakeKeychain(), deviceId: UUID())
+        do {
+            try await store.register(email: "a@b.co", password: "pw")
+            XCTFail("expected throw")
+        } catch let error as AuthStoreError {
+            XCTAssertEqual(error, .emailAlreadyRegistered)
+        } catch {
+            XCTFail("unexpected \(error)")
+        }
+    }
 }

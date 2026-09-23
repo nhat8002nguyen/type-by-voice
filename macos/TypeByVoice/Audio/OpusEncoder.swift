@@ -13,6 +13,8 @@ final class OpusEncoder: OpusEncoding {
     static let channels: Int32 = 1
     static let frameSize = 320
     static let bitrate: Int32 = 24_000
+    /// Near-silent incomplete end frames below this RMS are dropped instead of zero-padded.
+    private static let trailingSilenceRMS: Float = 0.005
     /// Granule positions are always in 48 kHz units for Ogg Opus.
     private static let granuleRate: Int64 = 48_000
     private static let captureRate: Int64 = 16_000
@@ -92,11 +94,21 @@ final class OpusEncoder: OpusEncoding {
         }
 
         if !pending.isEmpty {
-            var frame = pending
-            frame.append(contentsOf: [Float](repeating: 0, count: Self.frameSize - frame.count))
-            pending = []
-            if let page = encodeFrame(frame, endOfStream: true) {
-                out.append(page)
+            // Zero-padding a partial end frame with silence is a common cause of
+            // Whisper inventing a trailing “Thank you.” Drop near-silent leftovers
+            // and only emit EOS; keep real speech tail frames.
+            if Self.rms(of: pending) < Self.trailingSilenceRMS {
+                pending = []
+                if let page = flushEOS() {
+                    out.append(page)
+                }
+            } else {
+                var frame = pending
+                frame.append(contentsOf: [Float](repeating: 0, count: Self.frameSize - frame.count))
+                pending = []
+                if let page = encodeFrame(frame, endOfStream: true) {
+                    out.append(page)
+                }
             }
         } else if let page = flushEOS() {
             out.append(page)
@@ -236,5 +248,14 @@ final class OpusEncoder: OpusEncoding {
             withUnsafeMutablePointer(to: &stream) { ogg_stream_clear($0) }
             streamInitialized = false
         }
+    }
+
+    private static func rms(of samples: [Float]) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sumSquares: Float = 0
+        for sample in samples {
+            sumSquares += sample * sample
+        }
+        return sqrt(sumSquares / Float(samples.count))
     }
 }

@@ -37,20 +37,9 @@ final class AudioCaptureService: AudioCaptureStarting {
         prepareEngine()
         guard let engine, !isTapInstalled else { return }
 
-        // Start first so Bluetooth headsets finish negotiating their input format
-        // before we read it and install the tap.
-        do {
-            try engine.start()
-        } catch {
-            return
-        }
-
         let input = engine.inputNode
         let inputFormat = input.inputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            engine.stop()
-            return
-        }
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { return }
 
         guard let outputFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -58,73 +47,47 @@ final class AudioCaptureService: AudioCaptureStarting {
             channels: 1,
             interleaved: false
         ) else {
-            engine.stop()
             return
         }
+        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else { return }
 
         let bufferSize: AVAudioFrameCount = 1_024
         // Tap callback runs on AVAudioEngine's realtime queue — keep it off the MainActor.
-        // format: nil uses whatever the hardware delivers (important when BT switches rate).
         Self.installTap(
             on: input,
             bufferSize: bufferSize,
+            format: inputFormat,
+            converter: converter,
             outputFormat: outputFormat
         ) { [weak self] samples, peak in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.ringBuffer.write(samples)
                 self.lastLevel = Double(min(max(peak, 0), 1))
-                self.appendMicDiagnostic(peak: peak, sampleCount: samples.count)
                 self.onSamples?(samples)
             }
         }
         isTapInstalled = true
-    }
 
-    private var lastMicLogSecond: Int64 = -1
-
-    private func appendMicDiagnostic(peak: Float, sampleCount: Int) {
-        let second = Int64(Date().timeIntervalSince1970)
-        guard second != lastMicLogSecond else { return }
-        lastMicLogSecond = second
-        let line = String(format: "%.3f peak=%.4f samples=%d\n", Date().timeIntervalSince1970, peak, sampleCount)
-        guard let data = line.data(using: .utf8) else { return }
-        let url = URL(fileURLWithPath: "/tmp/tbv-mic.log")
-        if FileManager.default.fileExists(atPath: url.path),
-           let handle = try? FileHandle(forWritingTo: url)
-        {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: url)
+        do {
+            try engine.start()
+        } catch {
+            input.removeTap(onBus: 0)
+            isTapInstalled = false
         }
     }
 
     private nonisolated static func installTap(
         on input: AVAudioInputNode,
         bufferSize: AVAudioFrameCount,
+        format: AVAudioFormat,
+        converter: AVAudioConverter,
         outputFormat: AVAudioFormat,
         onConverted: @escaping @Sendable ([Float], Float) -> Void
     ) {
-        let outputFormat = outputFormat
-        // Rebuild the converter if the hardware format changes mid-stream (common on BT).
-        final class ConverterBox: @unchecked Sendable {
-            var converter: AVAudioConverter?
-            var fromFormat: AVAudioFormat?
-        }
-        let box = ConverterBox()
-
-        input.installTap(onBus: 0, bufferSize: bufferSize, format: nil) { buffer, _ in
-            let from = buffer.format
-            if box.converter == nil
-                || box.fromFormat?.sampleRate != from.sampleRate
-                || box.fromFormat?.channelCount != from.channelCount
-            {
-                box.converter = AVAudioConverter(from: from, to: outputFormat)
-                box.fromFormat = from
-            }
-            guard let converter = box.converter else { return }
+        nonisolated(unsafe) let converter = converter
+        nonisolated(unsafe) let outputFormat = outputFormat
+        input.installTap(onBus: 0, bufferSize: bufferSize, format: format) { buffer, _ in
             guard let samplesAndPeak = convert(
                 buffer: buffer,
                 converter: converter,
@@ -153,7 +116,6 @@ final class AudioCaptureService: AudioCaptureStarting {
         converter: AVAudioConverter,
         outputFormat: AVAudioFormat
     ) -> (samples: [Float], peak: Float)? {
-        guard buffer.frameLength > 0, buffer.format.sampleRate > 0 else { return nil }
         let ratio = outputFormat.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
         guard let converted = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else {

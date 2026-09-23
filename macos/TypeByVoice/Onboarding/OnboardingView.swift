@@ -118,6 +118,8 @@ struct OnboardingView: View {
             }
             model.didAuthenticate()
             step = .microphone
+        } catch let error as LocalizedError where error.errorDescription != nil {
+            authError = error.errorDescription
         } catch {
             authError = error.localizedDescription
         }
