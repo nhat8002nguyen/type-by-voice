@@ -16,6 +16,7 @@ export class SpeechController {
   ) {}
 
   @MessagePattern(SPEECH_TRANSCRIBE_PATTERN)
+  /** transcribe handles the speech.transcribe NATS request. */
   async transcribe(
     @Payload() dto: TranscribeRequestDto,
   ): Promise<TranscribeResponseDto> {

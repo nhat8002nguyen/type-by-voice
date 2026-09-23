@@ -6,6 +6,7 @@ export const SPEECH_PROVIDER = Symbol('SPEECH_PROVIDER');
 export class SpeechService {
   private readonly logger = new Logger(SpeechService.name);
 
+  /** logCompleted records a successful transcription metric/log line without logging transcript text. */
   logCompleted(
     requestId: string,
     providerLatencyMs: number,
