@@ -6,9 +6,10 @@ struct AuthHTTPResponse {
 }
 
 enum AuthHTTPError: Error, Equatable {
-    case status(Int)
+    case status(Int, serverMessage: String? = nil)
     case invalidResponse
     case encodingFailed
+    case unreachable
 }
 
 @MainActor
@@ -39,22 +40,85 @@ final class URLSessionAuthHTTPClient: AuthHTTPClient {
         }
         request.httpBody = httpBody
 
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw AuthHTTPError.unreachable
+        }
         guard let http = response as? HTTPURLResponse else {
             throw AuthHTTPError.invalidResponse
         }
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         if http.statusCode >= 400 {
-            throw AuthHTTPError.status(http.statusCode)
+            throw AuthHTTPError.status(http.statusCode, serverMessage: Self.serverMessage(from: json))
         }
         return AuthHTTPResponse(status: http.statusCode, json: json)
     }
+
+    private static func serverMessage(from json: [String: Any]) -> String? {
+        if let message = json["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let messages = json["message"] as? [String], !messages.isEmpty {
+            return messages.joined(separator: " ")
+        }
+        return nil
+    }
 }
 
-enum AuthStoreError: Error, Equatable {
+enum AuthStoreError: Error, Equatable, LocalizedError {
     case missingRefreshToken
     case missingAccessToken
     case invalidTokenResponse
+    /// Login 401 — API uses the same status for unknown email and bad password.
+    case invalidCredentials
+    case emailAlreadyRegistered
+    case invalidRequest(String?)
+    case rateLimited
+    case unreachable
+    case httpStatus(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRefreshToken, .missingAccessToken:
+            return "Your session expired. Please sign in again."
+        case .invalidTokenResponse:
+            return "Sign-in failed. Please try again."
+        case .invalidCredentials:
+            return "Email or password is incorrect, or no account exists with that email."
+        case .emailAlreadyRegistered:
+            return "An account with this email already exists. Sign in instead."
+        case let .invalidRequest(message):
+            return message ?? "Check your email and password and try again."
+        case .rateLimited:
+            return "Too many attempts. Please wait and try again."
+        case .unreachable:
+            return "Could not connect to the server. Is it running?"
+        case let .httpStatus(code):
+            return "Request failed (HTTP \(code))."
+        }
+    }
+
+    static func fromHTTP(_ error: AuthHTTPError, registering: Bool) -> AuthStoreError {
+        switch error {
+        case .unreachable:
+            return .unreachable
+        case .invalidResponse, .encodingFailed:
+            return .invalidTokenResponse
+        case let .status(401, _) where !registering:
+            return .invalidCredentials
+        case let .status(409, _):
+            return .emailAlreadyRegistered
+        case let .status(400, message):
+            return .invalidRequest(message)
+        case .status(429, _):
+            return .rateLimited
+        case let .status(code, _):
+            return .httpStatus(code)
+        }
+    }
 }
 
 @MainActor
@@ -98,8 +162,12 @@ final class AuthStore {
             "email": email,
             "password": password,
         ])
-        let response = try await http.post(path: "/v1/auth/register", body: body)
-        try applyTokenResponse(response.json, email: email)
+        do {
+            let response = try await http.post(path: "/v1/auth/register", body: body)
+            try applyTokenResponse(response.json, email: email)
+        } catch let error as AuthHTTPError {
+            throw AuthStoreError.fromHTTP(error, registering: true)
+        }
     }
 
     func login(email: String, password: String) async throws {
@@ -107,8 +175,12 @@ final class AuthStore {
             "email": email,
             "password": password,
         ])
-        let response = try await http.post(path: "/v1/auth/login", body: body)
-        try applyTokenResponse(response.json, email: email)
+        do {
+            let response = try await http.post(path: "/v1/auth/login", body: body)
+            try applyTokenResponse(response.json, email: email)
+        } catch let error as AuthHTTPError {
+            throw AuthStoreError.fromHTTP(error, registering: false)
+        }
     }
 
     func refreshIfNeeded() async throws {

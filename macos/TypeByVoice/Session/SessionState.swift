@@ -22,6 +22,8 @@ struct SessionTimeouts: Equatable {
     var silenceDurationMs: Int = 3_000
     var noSpeechTimeoutMs: Int = 10_000
     var minDurationMs: Int = 400
-    var trailingHangoverMs: Int = 100
+    /// Silence kept after the last speech before stop. Keep at 0 — even short
+    /// trailing silence makes Whisper-family models invent “Thank you.”
+    var trailingHangoverMs: Int = 0
     var warmSocketSeconds: TimeInterval = 60
 }

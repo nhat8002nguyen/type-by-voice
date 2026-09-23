@@ -7,7 +7,7 @@ struct SilenceDetector {
     private var pending: [Float] = []
     private var calibrationRMSs: [Float] = []
     private var noiseFloor: Float?
-    private(set) var hasSeenSpeech = false
+    private var hasSeenSpeech = false
     private var consecutiveSilentMs = 0
     private var elapsedMs = 0
     private var terminalEventEmitted = false
@@ -33,10 +33,10 @@ struct SilenceDetector {
         terminalEventEmitted = false
     }
 
-    /// Calibrated speech gate: `noiseFloor * 2.0`. `nil` until calibration finishes.
+    /// Calibrated speech gate: `noiseFloor * 2.5`. `nil` until calibration finishes.
     var speechRMSThreshold: Float? {
         guard let noiseFloor else { return nil }
-        return noiseFloor * 2.0
+        return noiseFloor * 2.5
     }
 
     /// Same speech test used by `process` after calibration. Before calibration, not speech.
@@ -61,11 +61,8 @@ struct SilenceDetector {
             if noiseFloor == nil {
                 calibrationRMSs.append(rms)
                 if calibrationRMSs.count >= 15 {
-                    // Use a quiet percentile so speaking during calibration does not
-                    // raise the floor above real speech levels.
-                    let sorted = calibrationRMSs.sorted()
-                    let index = max(0, sorted.count / 4)
-                    noiseFloor = max(sorted[index], 1e-5)
+                    let mean = calibrationRMSs.reduce(0, +) / Float(calibrationRMSs.count)
+                    noiseFloor = max(mean, 1e-5)
                 }
                 if !hasSeenSpeech, elapsedMs >= noSpeechTimeoutMs {
                     terminalEventEmitted = true
