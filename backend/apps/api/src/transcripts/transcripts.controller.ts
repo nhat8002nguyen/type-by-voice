@@ -38,6 +38,7 @@ export class ListTranscriptsQueryDto {
 
 type TranscriptsActor = { userId: string } | RequestUser;
 
+/** toUserId extracts the authenticated user id for transcript HTTP handlers. */
 function toUserId(user: TranscriptsActor): string {
   return 'userId' in user ? user.userId : user.id;
 }
@@ -52,6 +53,7 @@ export class TranscriptsController {
   }
 
   @Get()
+  /** list returns a page of the caller's transcript history from workflows-service. */
   list(
     @CurrentUser() user: TranscriptsActor,
     @Query() query: ListTranscriptsQueryDto,
@@ -61,11 +63,13 @@ export class TranscriptsController {
 
   @Get('export')
   @Header('Content-Type', 'application/json')
+  /** export downloads the caller's visible transcript history. */
   export(@CurrentUser() user: TranscriptsActor) {
     return this.transcriptsService.export(toUserId(user));
   }
 
   @Get(':id')
+  /** get returns one transcript owned by the caller. */
   async get(@CurrentUser() user: TranscriptsActor, @Param('id') id: string) {
     const item = await this.transcriptsService.get(toUserId(user), id);
     if (item == null) {
@@ -76,12 +80,14 @@ export class TranscriptsController {
 
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
+  /** deleteAll soft-deletes all of the caller's transcripts. */
   deleteAll(@CurrentUser() user: TranscriptsActor) {
     return this.transcriptsService.deleteAll(toUserId(user));
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  /** delete soft-deletes one transcript owned by the caller. */
   delete(@CurrentUser() user: TranscriptsActor, @Param('id') id: string) {
     return this.transcriptsService.delete(toUserId(user), id);
   }
