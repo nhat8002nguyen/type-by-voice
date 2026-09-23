@@ -31,18 +31,22 @@ const TICK_MS = 1_000;
 export const MAX_DICTATION_FRAME_BYTES = 256 * 1024;
 const WS_INTERNAL_CLOSE = 1011;
 
+/** closeCodeForAuthError returns the WebSocket close code used for auth failures. */
 export function closeCodeForAuthError(_error?: unknown): number {
   return CLOSE_CODES.unauthenticated;
 }
 
+/** closeCodeForQuota returns the WebSocket close code used when quota check denies the session. */
 export function closeCodeForQuota(_reason?: string): number {
   return CLOSE_CODES.quota_exceeded;
 }
 
+/** closeCodeForRateLimit returns the WebSocket close code used when the dictate upgrade is rate limited. */
 export function closeCodeForRateLimit(): number {
   return CLOSE_CODES.rate_limited;
 }
 
+/** isUtf8Json reports whether a buffer looks like UTF-8 JSON (object or array payload). */
 export function isUtf8Json(data: Buffer): boolean {
   for (let i = 0; i < data.length; i += 1) {
     const byte = data[i];
@@ -92,6 +96,10 @@ export class DictateGateway
     this.limiter = limiter ?? new AuthLimiter();
   }
 
+  /**
+   * handleConnection authenticates the upgrade, attaches DictateService, and starts the idle tick timer.
+   * Closes the socket on rate limit, auth, or pre-check quota failure.
+   */
   async handleConnection(
     client: DictateSocket,
     req: IncomingMessage,
@@ -111,6 +119,7 @@ export class DictateGateway
     await run();
   }
 
+  /** handleDisconnect clears timers and releases the user's session registry slot. */
   handleDisconnect(client: DictateSocket): void {
     this.clearTick(client);
     const service = client.dictateService;
@@ -120,6 +129,10 @@ export class DictateGateway
     client.dictateService = undefined;
   }
 
+  /**
+   * handleMessage routes one WebSocket frame (JSON text or binary audio) to DictateService.
+   * Oversized frames and unexpected errors become protocol failures flushed to the client.
+   */
   async handleMessage(client: DictateSocket, data: SocketData): Promise<void> {
     const service = client.dictateService;
     if (!service) {
@@ -148,6 +161,7 @@ export class DictateGateway
     }
   }
 
+  /** bindInbound queues inbound messages until auth completes, then serializes handlers on messageChain. */
   private bindInbound(client: DictateSocket): { release: () => void } {
     let releaseAuth!: () => void;
     const untilAuth = new Promise<void>((resolve) => {
@@ -169,6 +183,9 @@ export class DictateGateway
     return { release: () => releaseAuth() };
   }
 
+  /**
+   * authenticateAndAttach verifies JWT + session, checks quota, and constructs DictateService on the socket.
+   */
   private async authenticateAndAttach(
     client: DictateSocket,
     req: IncomingMessage,
@@ -270,6 +287,7 @@ export class DictateGateway
     }, TICK_MS);
   }
 
+  /** runTraced runs fn under a requestId or existing/new trace when TraceContextService is present. */
   private runTraced<T>(data: SocketData, fn: () => Promise<T>): Promise<T> {
     if (!this.traceContext) {
       return fn();
@@ -285,6 +303,7 @@ export class DictateGateway
     return Promise.resolve(this.traceContext.runWithNewTrace(() => fn()));
   }
 
+  /** pumpTick fires session onTick and closes idle sockets that exceeded the inactivity window. */
   private async pumpTick(client: DictateSocket): Promise<void> {
     const service = client.dictateService;
     if (!service) {
@@ -308,6 +327,7 @@ export class DictateGateway
     }
   }
 
+  /** handleProcessingError maps an uncaught handler error into a protocol failure flush. */
   private handleProcessingError(client: DictateSocket, error: unknown): void {
     const service = client.dictateService;
     if (!service) {
@@ -316,10 +336,12 @@ export class DictateGateway
     this.flush(client, service, service.failUnexpected(error));
   }
 
+  /** parseText decodes a WebSocket buffer as UTF-8 JSON. */
   private parseText(buffer: Buffer): unknown {
     return JSON.parse(buffer.toString('utf8'));
   }
 
+  /** flush sends a server text message if present and applies any pending close from DictateService. */
   private flush(
     client: DictateSocket,
     service: DictateService,
@@ -353,6 +375,7 @@ export class DictateGateway
     }
   }
 
+  /** clearTick stops the per-connection idle/max-duration interval timer. */
   private clearTick(client: DictateSocket): void {
     if (client.dictateTimer) {
       clearInterval(client.dictateTimer);
@@ -368,6 +391,7 @@ type AccessJwtPayload = {
   deviceId?: string;
 };
 
+/** bearerToken extracts a non-empty Bearer token from an Authorization header. */
 function bearerToken(
   header: string | string[] | undefined,
 ): string | undefined {
@@ -379,6 +403,7 @@ function bearerToken(
   return token.length > 0 ? token : undefined;
 }
 
+/** toBuffer normalizes a ws message payload into a single Buffer. */
 function toBuffer(data: SocketData): Buffer {
   if (Buffer.isBuffer(data)) {
     return data;
@@ -392,6 +417,7 @@ function toBuffer(data: SocketData): Buffer {
   return Buffer.from(new Uint8Array(data));
 }
 
+/** peekRequestId reads requestId from a JSON text frame without fully handling the message. */
 function peekRequestId(data: SocketData): string | undefined {
   try {
     const buffer = toBuffer(data);

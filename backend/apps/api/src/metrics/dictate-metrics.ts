@@ -29,6 +29,7 @@ export class DictateMetrics {
   #providerErrors = 0;
   #quotaRejected = 0;
 
+  /** record accumulates per-platform stage timings for one completed dictation. */
   record(timings: StageTimings): void {
     add(this.#connect, timings.platform, timings.connectMs);
     add(this.#audioReceived, timings.platform, timings.audioReceivedMs);
@@ -36,14 +37,17 @@ export class DictateMetrics {
     add(this.#total, timings.platform, timings.totalMs);
   }
 
+  /** recordProviderError increments the speech-provider failure counter. */
   recordProviderError(): void {
     this.#providerErrors += 1;
   }
 
+  /** recordQuotaRejected increments the pre-session quota rejection counter. */
   recordQuotaRejected(): void {
     this.#quotaRejected += 1;
   }
 
+  /** snapshot returns a copy of accumulated dictate timing and error counters. */
   snapshot(): MetricsSnapshot {
     return {
       dictate_connect_ms: cloneStage(this.#connect),
@@ -56,10 +60,12 @@ export class DictateMetrics {
   }
 }
 
+/** emptyStage returns an empty per-platform stage accumulator. */
 function emptyStage(): StageSnapshot {
   return {};
 }
 
+/** add increments count and sumMs for a platform bucket in a stage snapshot. */
 function add(stage: StageSnapshot, platform: string, ms: number): void {
   const current = stage[platform] ?? { count: 0, sumMs: 0 };
   current.count += 1;
@@ -67,6 +73,7 @@ function add(stage: StageSnapshot, platform: string, ms: number): void {
   stage[platform] = current;
 }
 
+/** cloneStage deep-copies a stage snapshot so callers cannot mutate internals. */
 function cloneStage(stage: StageSnapshot): StageSnapshot {
   const copy: StageSnapshot = {};
   for (const [platform, value] of Object.entries(stage)) {
