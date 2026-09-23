@@ -6,6 +6,7 @@ export class NotificationsServiceController {
   constructor(private readonly notificationsServiceService: NotificationsServiceService) {}
 
   @Get()
+  /** getHello returns the scaffold hello string for notifications-service. */
   getHello(): string {
     return this.notificationsServiceService.getHello();
   }

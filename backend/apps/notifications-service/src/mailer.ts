@@ -5,6 +5,7 @@ import type { SendEmailDto } from '@app/notifications';
 export class Mailer {
   private readonly logger = new Logger(Mailer.name);
 
+  /** send delivers one templated email (verify, reset, quota-warning, quota-exhausted). */
   send(dto: SendEmailDto): void {
     if (process.env.NODE_ENV === 'production') {
       this.logger.log(`type=${dto.type} userId=${dto.userId}`);

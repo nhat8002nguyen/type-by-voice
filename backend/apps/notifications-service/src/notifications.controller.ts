@@ -18,6 +18,7 @@ export class NotificationsController {
   ) {}
 
   @EventPattern(NOTIFICATIONS_EMAIL_EVENT)
+  /** onEmail handles NOTIFICATIONS_EMAIL_EVENT payloads from RabbitMQ. */
   async onEmail(
     @Payload() dto: SendEmailDto,
     @Ctx() context: RmqContext,
