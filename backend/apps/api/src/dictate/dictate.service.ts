@@ -105,30 +105,40 @@ export class DictateService {
     this.#metrics = metrics;
   }
 
+  /** userId returns the authenticated user id for this WebSocket session. */
   get userId(): string {
     return this.#user.userId;
   }
 
+  /** platform returns the client platform claimed at connection time. */
   get platform(): Platform {
     return this.#user.platform;
   }
 
+  /** deviceId returns the client device id claimed at connection time. */
   get deviceId(): string {
     return this.#user.deviceId;
   }
 
+  /** audioReceivedMs returns milliseconds from connect until the last binary audio frame (or connect if none). */
   get audioReceivedMs(): number {
     return (this.#audioReceivedAtMs ?? this.#startedAtMs) - this.#startedAtMs;
   }
 
+  /** providerMs returns the last speech-provider round-trip duration in milliseconds. */
   get providerMs(): number {
     return this.#providerMs;
   }
 
+  /** isBusy reports whether the session is waiting on transcription after stop. */
   get isBusy(): boolean {
     return this.#session?.status === 'stopping';
   }
 
+  /**
+   * failUnexpected maps unexpected errors to a protocol error message.
+   * Syntax errors become invalid_request; failures during stopping fail the in-flight transcription.
+   */
   failUnexpected(error?: unknown): ServerTextMessage {
     const requestId = this.#session?.requestId ?? '';
     if (error instanceof SyntaxError) {
@@ -143,12 +153,17 @@ export class DictateService {
     return this.protocolError('internal', requestId);
   }
 
+  /** takePendingClose returns and clears a close instruction produced by the session state machine. */
   takePendingClose(): DictateClose | undefined {
     const close = this.#pendingClose;
     this.#pendingClose = undefined;
     return close;
   }
 
+  /**
+   * onText handles a client JSON control message (start/stop/cancel/…).
+   * Replays idempotent finals from cache when a start repeats a finished requestId.
+   */
   async onText(data: unknown): Promise<ServerTextMessage | undefined> {
     if (isStart(data)) {
       const cached = this.#cache.lookup(data.requestId);
@@ -177,6 +192,7 @@ export class DictateService {
     return message;
   }
 
+  /** onBinary forwards one Opus frame into the active DictationSession buffer. */
   async onBinary(bytes: Buffer): Promise<ServerTextMessage | undefined> {
     if (this.#session === undefined) {
       return undefined;
@@ -190,6 +206,7 @@ export class DictateService {
     );
   }
 
+  /** onTick advances session timers (idle / max duration) and may emit timeout errors. */
   async onTick(nowMs: number): Promise<ServerTextMessage | undefined> {
     if (this.#session === undefined) {
       return undefined;
@@ -197,6 +214,10 @@ export class DictateService {
     return this.consume(this.#session.handle({ kind: 'tick', nowMs }));
   }
 
+  /**
+   * startSession enforces per-user concurrency, checks quota via NATS, then opens a DictationSession.
+   * Returns a protocol error when concurrency, quota, or the check RPC fails.
+   */
   private async startSession(
     data: StartMessageLike,
   ): Promise<ServerTextMessage | undefined> {
@@ -262,6 +283,10 @@ export class DictateService {
     return message;
   }
 
+  /**
+   * consume applies SessionOutput list in order, running transcription when requested.
+   * Returns the last server text message produced.
+   */
   private async consume(
     outputs: SessionOutput[],
   ): Promise<ServerTextMessage | undefined> {
@@ -276,6 +301,7 @@ export class DictateService {
     return last;
   }
 
+  /** applyOutputs applies non-transcribe SessionOutputs (send/close) without calling speech. */
   private applyOutputs(
     outputs: SessionOutput[],
   ): ServerTextMessage | undefined {
@@ -289,6 +315,7 @@ export class DictateService {
     return last;
   }
 
+  /** applyOutput sends a message to the client path or records a pending WebSocket close. */
   private applyOutput(
     output: Extract<SessionOutput, { kind: 'send' } | { kind: 'close' }>,
   ): ServerTextMessage | undefined {
@@ -303,6 +330,10 @@ export class DictateService {
     return undefined;
   }
 
+  /**
+   * transcribeAndFinalize sends assembled audio to speech-service, commits quota, and enqueues transcript persistence.
+   * Completes or fails the DictationSession based on provider and quota RPC outcomes.
+   */
   private async transcribeAndFinalize(output: {
     requestId: string;
     audio: Uint8Array;
@@ -399,6 +430,10 @@ export class DictateService {
     );
   }
 
+  /**
+   * enqueueQuotaEmail enqueues a warning or exhausted email when usage crosses thresholds.
+   * No-ops when the user has no email or the plan has no word limit.
+   */
   private async enqueueQuotaEmail(quota: QuotaSnapshot): Promise<void> {
     const email = this.#user.email;
     if (!email || quota.limit == null) {
@@ -426,6 +461,9 @@ export class DictateService {
     });
   }
 
+  /**
+   * protocolError builds an ErrorMessage, caches it for idempotency, and schedules the matching close code.
+   */
   private protocolError(code: ErrorCode, requestId: string): ErrorMessage {
     this.#pendingClose = {
       code:
@@ -446,6 +484,7 @@ export class DictateService {
   }
 }
 
+/** estimatedCostMicros estimates provider cost in micros from audio duration. */
 export function estimatedCostMicros(audioMs: number): number {
   return Math.round((audioMs / MS_PER_HOUR) * COST_MICROS_PER_HOUR);
 }
@@ -456,6 +495,7 @@ type StartMessageLike = {
   clientVersion?: unknown;
 };
 
+/** isStart is a type guard for client start control messages with a string requestId. */
 function isStart(data: unknown): data is StartMessageLike {
   return (
     typeof data === 'object' &&
@@ -465,6 +505,7 @@ function isStart(data: unknown): data is StartMessageLike {
   );
 }
 
+/** isCancel reports whether the payload is a cancel control message. */
 function isCancel(data: unknown): boolean {
   return (
     typeof data === 'object' &&
