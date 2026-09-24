@@ -11,6 +11,7 @@ export class OutboxService {
     private readonly outboxRepository: Repository<Outbox>,
   ) {}
 
+  /** enqueue writes a transactional outbox row for later RMQ/NATS dispatch. */
   async enqueue(message: {
     type: string;
     payload: Record<string, unknown>;
@@ -26,6 +27,7 @@ export class OutboxService {
     );
   }
 
+  /** getPendingOutboxMessages loads undispatched rows for the processor. */
   async getPendingOutboxMessages(options: {
     target: string;
     take: number;
@@ -37,6 +39,7 @@ export class OutboxService {
     });
   }
 
+  /** markAsProcessed marks a row as dispatched. */
   async markAsProcessed(id: number): Promise<void> {
     const row = await this.outboxRepository.findOneBy({ id });
     if (!row) {

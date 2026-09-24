@@ -25,6 +25,7 @@ export class InboxProcessor extends WorkerHost implements OnModuleInit {
     super();
   }
 
+  /** onModuleInit starts the inbox worker loop when the module initializes. */
   async onModuleInit(): Promise<void> {
     await this.inboxQueue.upsertJobScheduler(
       INBOX_REPEATABLE_JOB_ID,
@@ -33,10 +34,12 @@ export class InboxProcessor extends WorkerHost implements OnModuleInit {
     );
   }
 
+  /** process drives the inbox worker loop on schedule or init. */
   async process(): Promise<void> {
     await this.processPending();
   }
 
+  /** processPending claims and handles a batch of pending inbox rows. */
   async processPending(): Promise<void> {
     for (let i = 0; i < this.options.take; i++) {
       let claimedId: number | undefined;

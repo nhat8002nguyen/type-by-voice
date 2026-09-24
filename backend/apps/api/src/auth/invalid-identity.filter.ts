@@ -7,6 +7,7 @@ import {
 
 const IDENTITY_PROPERTY_MESSAGE = /^(platform|deviceId|clientVersion) /;
 
+/** isIdentityValidationMessage reports whether a BadRequest message is an identity field validation error. */
 export function isIdentityValidationMessage(message: unknown): boolean {
   const messages = Array.isArray(message) ? message : [message];
   return messages.some(
@@ -16,6 +17,7 @@ export function isIdentityValidationMessage(message: unknown): boolean {
 
 @Catch(BadRequestException)
 export class InvalidIdentityFilter implements ExceptionFilter {
+  /** catch maps identity validation BadRequests to { code: invalid_request } and re-emits other BadRequests. */
   catch(exception: BadRequestException, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse<{
       status: (code: number) => { json: (body: unknown) => void };

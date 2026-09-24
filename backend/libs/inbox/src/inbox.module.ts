@@ -10,6 +10,7 @@ import { InboxModuleAsyncOptions, InboxModuleOptions } from './inbox.types.js';
 @Global()
 @Module({})
 export class InboxModule {
+  /** registerAsync wires Nest module providers for the inbox feature with async options. */
   static registerAsync(options: InboxModuleAsyncOptions): DynamicModule {
     const optionsProvider = {
       provide: INBOX_OPTIONS,

@@ -14,6 +14,7 @@ export class HealthController {
 
   @Get()
   @HealthCheck()
+  /** check runs Terminus health indicators for api liveness/readiness. */
   check() {
     return this.health.check([() => this.db.pingCheck('database')]);
   }

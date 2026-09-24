@@ -6,6 +6,7 @@ import { ClientRegistration } from './tracing-client.types.js';
 
 @Module({})
 export class RmqClientModule {
+  /** register builds a Nest dynamic module for a traced RMQ ClientProxy. */
   static register(registrations: ClientRegistration[]): DynamicModule {
     const urls = [process.env.RABBITMQ_HOST ?? 'amqp://rabbitmq:5672'];
 

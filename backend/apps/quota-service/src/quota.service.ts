@@ -42,10 +42,12 @@ export class QuotaService {
     this.seedDefaultFreePlan();
   }
 
+  /** withMemory constructs an in-memory QuotaService for unit tests. */
   static withMemory(): QuotaService {
     return new QuotaService();
   }
 
+  /** resolvePeriod returns the open usage period for the user at now, creating one if needed. */
   resolvePeriod(
     userId: string,
     now: Date,
@@ -75,6 +77,7 @@ export class QuotaService {
     return period;
   }
 
+  /** toSnapshot maps plan + period counters into the client QuotaSnapshot shape. */
   toSnapshot(
     period: QuotaPeriod,
     plan: Pick<Plan, 'wordLimit'>,
@@ -87,6 +90,7 @@ export class QuotaService {
     };
   }
 
+  /** seedUser installs a subscription/period fixture for tests. */
   seedUser(
     userId: string,
     anchorAt: Date,
@@ -101,6 +105,10 @@ export class QuotaService {
     this.insertSubscription(userId, stored, period, anchorAt);
   }
 
+  /**
+   * check reports whether the user may start dictation under word and audio ceilings.
+   * Does not mutate counters.
+   */
   check(userId: string, now: Date): CheckQuotaResponseDto {
     const { period, plan } = this.loadCurrent(userId, now);
     const quota = this.toSnapshot(period, plan);
@@ -113,10 +121,12 @@ export class QuotaService {
     return { allowed: true, quota };
   }
 
+  /** checkFor adapts a CheckQuotaRequestDto into check(). */
   checkFor(dto: CheckQuotaRequestDto): CheckQuotaResponseDto {
     return this.check(dto.userId, new Date());
   }
 
+  /** commit records usage for requestId (idempotent) and advances words/audio on the period. */
   commit(
     dto: CommitQuotaRequestDto,
     now: Date,
@@ -138,6 +148,7 @@ export class QuotaService {
     });
   }
 
+  /** adjust applies a manual words delta with a reason (support/admin path). */
   adjust(userId: string, now: Date, wordsDelta: number, reason: string): void {
     const { period } = this.loadCurrent(userId, now);
     period.wordsUsed += wordsDelta;
@@ -153,6 +164,7 @@ export class QuotaService {
     this.adjustments.push(adjustment);
   }
 
+  /** runExclusive serializes async writers so commit mutations cannot interleave. */
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.writeQueue.then(fn, fn);
     this.writeQueue = run.then(
@@ -162,6 +174,7 @@ export class QuotaService {
     return run;
   }
 
+  /** loadCurrent loads the user's subscription, plan, and current period for the given time. */
   private loadCurrent(
     userId: string,
     now: Date,
@@ -184,6 +197,7 @@ export class QuotaService {
     return { period, plan };
   }
 
+  /** insertSubscription creates the default subscription row for a new user. */
   private insertSubscription(
     userId: string,
     plan: Plan,
@@ -204,6 +218,7 @@ export class QuotaService {
     return subscription;
   }
 
+  /** indexPlan indexes a plan entity into the in-memory plan map. */
   private indexPlan(window: QuotaPlanWindow): Plan {
     const existing = this.plans.get(window.id) ?? this.defaultPlanOrUndefined();
     if (existing && existing.id === window.id) {
@@ -222,10 +237,12 @@ export class QuotaService {
     return plan;
   }
 
+  /** requirePlan returns a plan by id or throws when missing. */
   private requirePlan(planId: string): Plan {
     return this.plans.get(planId) ?? this.defaultPlan();
   }
 
+  /** defaultPlan returns the configured default free plan. */
   private defaultPlan(): Plan {
     const plan = this.defaultPlanOrUndefined();
     if (!plan) {
@@ -234,6 +251,7 @@ export class QuotaService {
     return plan;
   }
 
+  /** defaultPlanOrUndefined returns the default plan when present. */
   private defaultPlanOrUndefined(): Plan | undefined {
     for (const plan of new Set(this.plans.values())) {
       if (plan.isDefault) {
@@ -243,6 +261,7 @@ export class QuotaService {
     return this.plans.get(DEFAULT_FREE_PLAN.name);
   }
 
+  /** toUsageRecord maps a commit into a UsageRecord entity shape. */
   private toUsageRecord(dto: CommitQuotaRequestDto, now: Date): UsageRecord {
     const record = new UsageRecord();
     record.id = randomUUID();
@@ -260,6 +279,7 @@ export class QuotaService {
     return record;
   }
 
+  /** seedDefaultFreePlan installs the built-in free plan into the in-memory store. */
   private seedDefaultFreePlan(): void {
     const plan = new Plan();
     plan.id = 'plan-free';
@@ -273,6 +293,7 @@ export class QuotaService {
   }
 }
 
+/** periodKey builds the map key for a user's usage period start. */
 function periodKey(userId: string, periodStart: Date): string {
   return `${userId}:${periodStart.toISOString()}`;
 }

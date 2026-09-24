@@ -19,6 +19,7 @@ export abstract class TracingClientProxyBase implements TracingClientProxy {
     this.context = this.logger.context;
   }
 
+  /** send logs and forwards a request/response pattern with the active trace id attached. */
   send<TResult = unknown, TInput = unknown>(
     pattern: unknown,
     data: TInput,
@@ -27,6 +28,7 @@ export abstract class TracingClientProxyBase implements TracingClientProxy {
     return this.client.send<TResult>(pattern, this.traced(data));
   }
 
+  /** emit logs and forwards an event pattern with the active trace id attached. */
   emit<TResult = unknown, TInput = unknown>(
     pattern: unknown,
     data: TInput,
@@ -35,10 +37,12 @@ export abstract class TracingClientProxyBase implements TracingClientProxy {
     return this.client.emit<TResult>(pattern, this.traced(data));
   }
 
+  /** traced returns data with the active trace id attached when present. */
   private traced(data: unknown): unknown {
     const traceId = this.traceContext.getTraceId();
     return traceId ? this.attachTraceId(data, traceId) : data;
   }
 
+  /** attachTraceId injects the active trace id into outbound message metadata. */
   protected abstract attachTraceId(data: unknown, traceId: string): unknown;
 }

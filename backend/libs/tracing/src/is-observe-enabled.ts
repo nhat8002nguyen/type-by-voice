@@ -1,3 +1,4 @@
+/** isObserveEnabled reports whether Nest observe/tracing instrumentation should load. */
 export function isObserveEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {

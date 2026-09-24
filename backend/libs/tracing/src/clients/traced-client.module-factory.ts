@@ -24,6 +24,7 @@ export interface TracedClientModuleDefinition {
   ) => TracingClientProxy;
 }
 
+/** createTracedClientModule builds a dynamic module wrapping a ClientProxy with tracing. */
 export function createTracedClientModule({
   module,
   registrations,

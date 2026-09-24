@@ -18,6 +18,7 @@ export type TranscriptListPage = {
   nextCursor?: string;
 };
 
+/** isUniqueViolation reports whether a TypeORM error is a Postgres unique-constraint violation. */
 function isUniqueViolation(error: unknown): boolean {
   if (!(error instanceof QueryFailedError)) {
     return false;
@@ -26,6 +27,7 @@ function isUniqueViolation(error: unknown): boolean {
   return driverError.code === '23505';
 }
 
+/** parseTranscriptEncryptionKey validates and decodes the env key material for AES-GCM. */
 export function parseTranscriptEncryptionKey(
   hex = process.env.TRANSCRIPT_ENCRYPTION_KEY,
 ): Buffer {
@@ -46,14 +48,20 @@ export class TranscriptsService {
     private readonly repository?: Repository<Transcript>,
   ) {}
 
+  /** withMemory constructs an in-memory TranscriptsService for unit tests. */
   static withMemory(key: Buffer): TranscriptsService {
     return new TranscriptsService(key);
   }
 
+  /** fromEnv constructs a TranscriptsService using encryption key material from the environment. */
   static fromEnv(repository: Repository<Transcript>): TranscriptsService {
     return new TranscriptsService(parseTranscriptEncryptionKey(), repository);
   }
 
+  /**
+   * handleInboxCreate persists a workflows.create payload from the inbox processor.
+   * Deduplicates on requestId so RMQ redelivery is safe.
+   */
   async handleInboxCreate(payload: unknown, em?: EntityManager): Promise<void> {
     const dto = payload as CreateTranscriptDto;
     this.logger.log(`requestId=${dto.requestId} wordCount=${dto.wordCount}`);
@@ -68,6 +76,7 @@ export class TranscriptsService {
     throw new Error(`transcript missing for requestId=${dto.requestId}`);
   }
 
+  /** create encrypts and stores a transcript, idempotent on requestId, without logging plaintext text. */
   async create(
     input: {
       userId: string;
@@ -99,6 +108,7 @@ export class TranscriptsService {
     return this.toPublic(await this.persist(row, em));
   }
 
+  /** search returns user-visible transcripts matching a decrypted-side query window. */
   async search(
     userId: string,
     q: string,
@@ -115,6 +125,7 @@ export class TranscriptsService {
     });
   }
 
+  /** get returns one user-visible transcript by id after decrypting ciphertext at rest. */
   async get(userId: string, id: string): Promise<PublicTranscript | null> {
     const row = await this.findById(id);
     if (!row || row.userId !== userId || row.deletedAt || !row.listInHistory) {
@@ -123,6 +134,7 @@ export class TranscriptsService {
     return this.toPublic(row);
   }
 
+  /** delete soft-deletes one user-owned transcript. */
   async delete(userId: string, id: string): Promise<void> {
     const row = await this.findById(id);
     if (!row || row.userId !== userId || row.deletedAt) {
@@ -132,6 +144,7 @@ export class TranscriptsService {
     await this.persist(row);
   }
 
+  /** deleteAll soft-deletes all transcripts owned by the user. */
   async deleteAll(userId: string, em?: EntityManager): Promise<void> {
     const now = new Date();
     const repository = this.store(em);
@@ -146,10 +159,12 @@ export class TranscriptsService {
     await repository.update({ userId, deletedAt: IsNull() }, { deletedAt: now });
   }
 
+  /** export returns a downloadable dump of the user's visible history. */
   async export(userId: string): Promise<PublicTranscript[]> {
     return (await this.loadVisible(userId)).map((row) => this.toPublic(row));
   }
 
+  /** list returns a newest-first page of the user's visible transcripts. */
   async list(
     userId: string,
     options: { cursor?: string; limit: number },
@@ -160,6 +175,7 @@ export class TranscriptsService {
     return paginatePublic(items, options);
   }
 
+  /** store inserts an encrypted transcript row into the persistence backend. */
   private store(em?: EntityManager): Repository<Transcript> | undefined {
     if (em) {
       return em.getRepository(Transcript);
@@ -167,6 +183,7 @@ export class TranscriptsService {
     return this.repository;
   }
 
+  /** findByRequestId looks up a transcript by idempotency requestId. */
   private async findByRequestId(
     requestId: string,
     em?: EntityManager,
@@ -178,6 +195,7 @@ export class TranscriptsService {
     return (await repository.findOne({ where: { requestId } })) ?? undefined;
   }
 
+  /** findById loads a transcript entity by primary key. */
   private async findById(
     id: string,
     em?: EntityManager,
@@ -189,6 +207,7 @@ export class TranscriptsService {
     return (await repository.findOne({ where: { id } })) ?? undefined;
   }
 
+  /** loadVisible loads non-deleted transcripts for the user. */
   private async loadVisible(
     userId: string,
     em?: EntityManager,
@@ -204,6 +223,7 @@ export class TranscriptsService {
     });
   }
 
+  /** persist writes transcript entity changes to the persistence backend. */
   private async persist(
     row: Transcript,
     em?: EntityManager,
@@ -227,6 +247,7 @@ export class TranscriptsService {
     }
   }
 
+  /** toPublic maps a stored transcript into the public API shape after decryption. */
   private toPublic(row: Transcript): PublicTranscript {
     return {
       id: row.id,
@@ -238,6 +259,7 @@ export class TranscriptsService {
   }
 }
 
+/** paginatePublic slices decrypted public transcripts into a page. */
 function paginatePublic(
   items: PublicTranscript[],
   options: { cursor?: string; limit: number },
@@ -257,6 +279,7 @@ function paginatePublic(
   };
 }
 
+/** compareNewestFirst orders transcripts by createdAt descending. */
 function compareNewestFirst(a: Transcript, b: Transcript): number {
   const byTime = b.createdAt.getTime() - a.createdAt.getTime();
   if (byTime !== 0) {

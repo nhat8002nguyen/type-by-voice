@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { Inbox } from './entities/inbox.entity.js';
 
+/** isUniqueViolation reports whether a DB error is a unique-constraint violation. */
 function isUniqueViolation(error: unknown): boolean {
   if (!(error instanceof QueryFailedError)) {
     return false;
@@ -18,6 +19,7 @@ export class InboxService {
     private readonly inboxRepository: Repository<Inbox>,
   ) {}
 
+  /** store inserts an inbox row for an incoming message id. */
   async store(input: {
     messageId: string;
     type: string;
@@ -43,6 +45,7 @@ export class InboxService {
     }
   }
 
+  /** storeIfNew inserts only when the message id is new (idempotent intake). */
   async storeIfNew(input: {
     messageId: string;
     type: string;
@@ -64,11 +67,13 @@ export class InboxService {
     }
   }
 
+  /** exists reports whether message id was already seen. */
   async exists(messageId: string): Promise<boolean> {
     const row = await this.inboxRepository.findOneBy({ messageId });
     return row != null;
   }
 
+  /** claimPending claims a batch of unprocessed inbox rows for the worker. */
   async claimPending(options: {
     take: number;
     maxAttempts: number;
@@ -87,6 +92,7 @@ export class InboxService {
       .getMany();
   }
 
+  /** markProcessed marks a row successfully handled. */
   async markProcessed(id: number, manager: EntityManager): Promise<void> {
     const repository = manager.getRepository(Inbox);
     const row = await repository.findOneByOrFail({ id });
@@ -94,6 +100,7 @@ export class InboxService {
     await repository.save(row);
   }
 
+  /** recordFailure records processing failure state for retry/dead-letter behavior. */
   async recordFailure(
     id: number,
     error: unknown,
@@ -110,6 +117,7 @@ export class InboxService {
     await repository.save(row);
   }
 
+  /** markFailed marks an inbox row as failed after exhausting processing attempts. */
   async markFailed(
     id: number,
     lastError: string,

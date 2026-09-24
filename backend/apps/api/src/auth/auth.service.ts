@@ -53,6 +53,7 @@ export type SessionView = {
   createdAt: Date;
 };
 
+/** isUniqueViolation reports whether a TypeORM error is a Postgres unique-constraint violation (23505). */
 function isUniqueViolation(error: unknown): boolean {
   if (!(error instanceof QueryFailedError)) {
     return false;
@@ -61,10 +62,12 @@ function isUniqueViolation(error: unknown): boolean {
   return driverError.code === '23505';
 }
 
+/** hashToken returns the SHA-256 hex digest used to store refresh/verify tokens at rest. */
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/** normalizeEmail trims and lowercases an email for stable lookups. */
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -85,6 +88,7 @@ export class AuthService {
     @Optional() private readonly rateLimit?: RateLimitGuard,
   ) {}
 
+  /** register creates a user, hashes the password with Argon2id, and returns access/refresh tokens. */
   async register(dto: RegisterDto, userAgent?: string): Promise<AuthTokens> {
     assertClientIdentity(dto);
     const email = normalizeEmail(dto.email);
@@ -123,6 +127,7 @@ export class AuthService {
     return this.issueTokens(user, dto, { userAgent });
   }
 
+  /** login verifies credentials, records rate-limit success/failure, and issues rotated session tokens. */
   async login(
     dto: LoginDto,
     userAgent?: string,
@@ -158,6 +163,7 @@ export class AuthService {
     }
   }
 
+  /** refresh rotates the refresh token for a device and returns a new access/refresh pair. */
   async refresh(
     refreshToken: string,
     identity: ClientIdentityDto,
@@ -191,6 +197,7 @@ export class AuthService {
     return this.issueTokens(user, identity, { rotate: true, userAgent });
   }
 
+  /** logout revokes the session identified by sessionId when it is still active. */
   async logout(sessionId: string): Promise<void> {
     const session = await this.sessions.findOneBy({ id: sessionId });
     if (!session || session.revokedAt != null) {
@@ -200,6 +207,7 @@ export class AuthService {
     await this.sessions.save(session);
   }
 
+  /** verifyEmail consumes a one-time verify token and sets emailVerifiedAt. */
   async verifyEmail(token: string): Promise<void> {
     const authToken = await this.consumeToken(token, 'verify-email');
     const user = await this.users.findOneBy({ id: authToken.userId });
@@ -210,6 +218,7 @@ export class AuthService {
     await this.users.save(user);
   }
 
+  /** forgotPassword enqueues a reset email when the address exists (always opaque to the caller). */
   async forgotPassword(email: string): Promise<void> {
     const user = await this.users.findOneBy({ email: normalizeEmail(email) });
     if (!user) {
@@ -225,6 +234,7 @@ export class AuthService {
     });
   }
 
+  /** resetPassword consumes a reset token and stores a new Argon2id password hash. */
   async resetPassword(token: string, password: string): Promise<void> {
     const passwordHash = await argon2.hash(password, {
       type: argon2.argon2id,
@@ -255,6 +265,7 @@ export class AuthService {
     });
   }
 
+  /** loadAccessSession validates JWT claims against a non-revoked DB session for dictate/HTTP auth. */
   async loadAccessSession(payload: { sub: string; sid: string }): Promise<{
     user: User;
     session: Session;
@@ -275,6 +286,7 @@ export class AuthService {
     return { user, session };
   }
 
+  /** getMe returns the public profile for userId or throws NotFound. */
   async getMe(userId: string): Promise<UserProfile> {
     const user = await this.users.findOneBy({ id: userId });
     if (!user) {
@@ -287,6 +299,7 @@ export class AuthService {
     };
   }
 
+  /** listSessions returns active device sessions for the user. */
   async listSessions(userId: string): Promise<SessionView[]> {
     const rows = await this.sessions.find({
       where: { userId, revokedAt: IsNull() },
@@ -300,6 +313,7 @@ export class AuthService {
     }));
   }
 
+  /** revokeSession revokes one device session owned by the user. */
   async revokeSession(userId: string, sessionId: string): Promise<void> {
     const session = await this.sessions.findOneBy({ id: sessionId, userId });
     if (!session || session.revokedAt != null) {
@@ -309,6 +323,7 @@ export class AuthService {
     await this.sessions.save(session);
   }
 
+  /** issueAuthToken creates a one-time auth token row and returns the raw token string. */
   private async issueAuthToken(
     userId: string,
     purpose: AuthTokenPurpose,
@@ -326,6 +341,7 @@ export class AuthService {
     return raw;
   }
 
+  /** consumeToken validates and consumes a one-time auth token for the given purpose. */
   private async consumeToken(
     token: string,
     purpose: AuthTokenPurpose,
@@ -333,6 +349,7 @@ export class AuthService {
     return this.consumeTokenIn(this.tokens, token, purpose);
   }
 
+  /** consumeTokenIn consumes a one-time token using the provided AuthToken repository. */
   private async consumeTokenIn(
     tokens: Repository<AuthToken>,
     token: string,
@@ -354,6 +371,7 @@ export class AuthService {
     return authToken;
   }
 
+  /** enqueueEmail writes a verify/reset email payload onto the notifications outbox. */
   private async enqueueEmail(payload: {
     type: 'verify-email' | 'reset-password';
     userId: string;
@@ -367,6 +385,7 @@ export class AuthService {
     });
   }
 
+  /** issueTokens creates or rotates a device session and returns signed access plus refresh tokens. */
   private async issueTokens(
     user: User,
     identity: ClientIdentityDto,
@@ -400,6 +419,7 @@ export class AuthService {
     };
   }
 
+  /** saveRotatedSession persists a new session row, optionally revoking the prior active session for the device. */
   private async saveRotatedSession(input: {
     user: User;
     identity: ClientIdentityDto;

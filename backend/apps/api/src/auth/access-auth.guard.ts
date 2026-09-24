@@ -27,6 +27,7 @@ export class AccessAuthGuard implements CanActivate {
     private readonly authService: AuthService,
   ) {}
 
+  /** canActivate validates a Bearer access JWT against a non-revoked DB session and attaches RequestUser. */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
       headers: { authorization?: string };

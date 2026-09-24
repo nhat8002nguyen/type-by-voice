@@ -6,9 +6,11 @@ import {
   NotificationsServiceModule,
 } from './notifications-service.module.js';
 
+/** bootstrap starts the notifications-service Nest microservice process. */
 async function bootstrap() {
   const app = await NestFactory.create(
     NotificationsServiceModule,
+    /** isObserveEnabled reports whether Nest observe/tracing instrumentation should load. */
     isObserveEnabled() ? { instrument: ObserveInstrument } : {},
   );
   app.connectMicroservice<MicroserviceOptions>(

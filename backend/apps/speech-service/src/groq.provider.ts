@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { SpeechProvider } from '@app/speech';
 
+/** createSpeechProvider builds the configured SpeechProvider (Groq or fake) from env. */
 export function createSpeechProvider(
   env: NodeJS.Dict<string> = process.env,
 ): SpeechProvider {
@@ -23,6 +24,7 @@ export function createSpeechProvider(
 export class FakeSpeechProvider implements SpeechProvider {
   readonly name = 'fake';
 
+  /** transcribe converts audio into text and reports provider latency metadata. */
   async transcribe(
     _audio: Buffer,
     _opts: { language: string },
@@ -35,6 +37,7 @@ const GROQ_TRANSCRIPTIONS_URL =
   'https://api.groq.com/openai/v1/audio/transcriptions';
 const DEFAULT_GROQ_MODEL = 'whisper-large-v3-turbo';
 
+/** resolveGroqModel returns the model id from env with a safe default. */
 export function resolveGroqModel(env: NodeJS.Dict<string> = process.env): string {
   const custom = env.GROQ_MODEL?.trim();
   return custom ? custom : DEFAULT_GROQ_MODEL;
@@ -74,6 +77,7 @@ export class GroqSpeechProvider implements SpeechProvider {
     this.logger.log(`whisper model=${this.model}`);
   }
 
+  /** transcribe converts audio into text and reports provider latency metadata. */
   async transcribe(
     audio: Buffer,
     opts: { language: string },

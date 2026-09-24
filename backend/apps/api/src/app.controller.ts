@@ -6,6 +6,7 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
+  /** getHello returns the scaffold hello string from AppService. */
   getHello(): string {
     return this.appService.getHello();
   }

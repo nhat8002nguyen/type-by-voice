@@ -19,6 +19,7 @@ export class MeQuotaController {
   constructor(@Inject(QUOTA_SERVICE) private readonly quota: ClientProxy) {}
 
   @Get('quota')
+  /** snapshot returns the caller's current quota snapshot from quota-service. */
   snapshot(@CurrentUser() user: RequestUser) {
     return this.get({
       userId: user.id,
@@ -29,6 +30,7 @@ export class MeQuotaController {
     });
   }
 
+  /** get returns the caller's current quota snapshot from quota-service. */
   async get(identity: CheckQuotaRequestDto) {
     const result = await firstValueFrom(
       this.quota.send<CheckQuotaResponseDto, CheckQuotaRequestDto>(
