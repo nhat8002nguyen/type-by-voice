@@ -11,6 +11,28 @@ cd macos
 xcodebuild test -scheme TypeByVoice -destination 'platform=macOS'
 ```
 
+### Build and run (Debug)
+
+Builds, resets Accessibility TCC for the ad-hoc-signed binary, and launches
+against the local backend (`:3000` by default):
+
+```bash
+./macos/Scripts/build-and-run.sh
+```
+
+After each Debug build, re-enable **TypeByVoice** in  
+System Settings → Privacy & Security → Accessibility.
+
+### Run current build
+
+Launch the existing Debug app without rebuilding:
+
+```bash
+./macos/Scripts/run.sh
+```
+
+Override API endpoints with `TBV_API_URL` / `TBV_DICTATE_URL` if needed.
+
 Unit tests live in `TypeByVoiceTests`. Integration tests in
 `TypeByVoiceIntegrationTests` start the Node `cli-mock` from
 `contracts/dictation-v1` and run the real coordinator + encoder + remote engine
