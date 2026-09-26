@@ -37,7 +37,8 @@ fi
 echo "==> Launching $APP"
 echo "    TBV_API_URL=${TBV_API_URL}"
 echo "    TBV_DICTATE_URL=${TBV_DICTATE_URL}"
-open -n --env TBV_API_URL --env TBV_DICTATE_URL "$APP"
+# open --env NAME alone sets an empty value; pass NAME=value explicitly.
+open -n --env "TBV_API_URL=${TBV_API_URL}" --env "TBV_DICTATE_URL=${TBV_DICTATE_URL}" "$APP"
 sleep 1
 if pgrep -x TypeByVoice >/dev/null; then
   echo "==> Running (pid $(pgrep -n -x TypeByVoice))"

@@ -4,5 +4,8 @@ WORKDIR /usr/src/app
 RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 COPY --from=contracts . /usr/src/contracts/dictation-v1
+# Contracts live outside /usr/src/app, so Node cannot resolve their deps from
+# app node_modules. Install them in-place (ws is needed when index re-exports mock-server).
+RUN npm ci --prefix /usr/src/contracts/dictation-v1
 RUN npm ci
 COPY . .
