@@ -4,7 +4,8 @@ upstream tbv_api {
 }
 
 # HTTP-only bootstrap for first Let's Encrypt issuance.
-# Copy over tbv-api.conf before first cert, then restore the TLS conf after.
+# init-letsencrypt.sh installs this over tbv-api.conf, then restores TLS from
+# tbv-api.tls.conf.example after certs exist.
 server {
   listen 80;
   server_name tbv-api.nate-ng.com;

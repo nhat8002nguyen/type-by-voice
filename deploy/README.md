@@ -55,37 +55,25 @@ GHCR_USER=your-github-username GHCR_TOKEN=ghp_... ./scripts/ghcr-login.sh
 
 ## First TLS cert
 
-Nginx will not start with the TLS site config until certificate files exist. Bootstrap sequence:
-
-1. Copy HTTP-only bootstrap over the live site config:
+Nginx will not start with the TLS site config until certificate files exist. Prefer letting `init-letsencrypt.sh` manage the bootstrap → issue → TLS restore sequence:
 
 ```bash
 cd /opt/type-by-voice/deploy
-cp nginx/conf.d/tbv-api.http-bootstrap.conf.example nginx/conf.d/tbv-api.conf
-```
-
-2. Pull images and start the stack (or at least `api` + `nginx`):
-
-```bash
 export IMAGE_TAG=latest GHCR_OWNER=your-owner
+# Optional: start api first so health checks work; init also starts nginx+api.
 ./scripts/deploy.sh
-```
-
-3. Issue the certificate (script also restores TLS config when done):
-
-```bash
 ./scripts/init-letsencrypt.sh
 ```
 
-4. If you restored TLS config manually instead, reload Nginx:
+What the script does:
 
-```bash
-cp nginx/conf.d/tbv-api.conf.tls.bak nginx/conf.d/tbv-api.conf  # if present
-# Or re-checkout the TLS tbv-api.conf from git, then:
-docker compose exec nginx nginx -s reload
-```
+1. If `./cert-data/.letsencrypt-ready` is missing, installs the HTTP-only bootstrap (`tbv-api.http-bootstrap.conf.example` → `tbv-api.conf`).
+2. Starts `nginx` + `api`, then runs `certbot certonly` (HTTP-01 webroot).
+3. Marks certs ready, copies the durable TLS template (`nginx/conf.d/tbv-api.tls.conf.example` → `tbv-api.conf`), and reloads nginx.
 
-Certbot renew runs in the `certbot` service loop every 12 hours.
+Do **not** manually overwrite `tbv-api.conf` with bootstrap and expect a `.tls.bak` restore — that path is gone. Keep `tbv-api.tls.conf.example` in git as the source of truth for HTTPS.
+
+Certbot renew runs every 12 hours via `scripts/certbot-loop.sh`. After a successful renew that writes new certs, the loop reloads nginx through the Docker socket (`docker exec … nginx -s reload`). Mounting `docker.sock` into certbot is a security tradeoff; keep the certbot image tag pinned.
 
 ## First app start
 

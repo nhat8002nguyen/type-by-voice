@@ -9,17 +9,20 @@ EMAIL="${CERTBOT_EMAIL:?CERTBOT_EMAIL required}"
 
 CONF_DIR=./nginx/conf.d
 TLS_CONF="${CONF_DIR}/tbv-api.conf"
+TLS_TEMPLATE="${CONF_DIR}/tbv-api.tls.conf.example"
 BOOTSTRAP_EXAMPLE="${CONF_DIR}/tbv-api.http-bootstrap.conf.example"
-TLS_BACKUP="${CONF_DIR}/tbv-api.conf.tls.bak"
 
 if [[ ! -f "${BOOTSTRAP_EXAMPLE}" ]]; then
   echo "missing ${BOOTSTRAP_EXAMPLE}" >&2
   exit 1
 fi
+if [[ ! -f "${TLS_TEMPLATE}" ]]; then
+  echo "missing ${TLS_TEMPLATE}" >&2
+  exit 1
+fi
 
 # Use HTTP-only site until certs exist (Nginx fails if ssl_certificate paths are missing).
 if [[ ! -f "./cert-data/.letsencrypt-ready" ]]; then
-  cp "${TLS_CONF}" "${TLS_BACKUP}"
   cp "${BOOTSTRAP_EXAMPLE}" "${TLS_CONF}"
 fi
 
@@ -35,12 +38,10 @@ docker compose run --rm --entrypoint certbot certbot certonly \
 mkdir -p ./cert-data
 touch ./cert-data/.letsencrypt-ready
 
-# Restore TLS site config and reload.
-if [[ -f "${TLS_BACKUP}" ]]; then
-  mv "${TLS_BACKUP}" "${TLS_CONF}"
-fi
+# Always restore full TLS site config from the durable template (not a bootstrap backup).
+cp "${TLS_TEMPLATE}" "${TLS_CONF}"
 
 docker compose up -d nginx
 docker compose exec nginx nginx -s reload
 
-echo "Certificate issued for ${DOMAIN}. TLS config restored."
+echo "Certificate issued for ${DOMAIN}. TLS config restored from ${TLS_TEMPLATE}."
