@@ -1,0 +1,83 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "contracts/dictation-v1/**"
+      - "deploy/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - api
+          - quota-service
+          - speech-service
+          - workflows-service
+          - notifications-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          build-args: |
+            APP_NAME=${{ matrix.app }}
+          build-contexts: |
+            contracts=contracts/dictation-v1
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/type-by-voice-${{ matrix.app }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/type-by-voice-${{ matrix.app }}:latest
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          port: ${{ secrets.DROPLET_SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            cd /opt/type-by-voice
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+            cd deploy
+            export IMAGE_TAG="${{ github.sha }}"
+            export GHCR_OWNER="${{ github.repository_owner }}"
+            grep -q '^IMAGE_TAG=' .env && sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env || echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
+            grep -q '^GHCR_OWNER=' .env && sed -i "s/^GHCR_OWNER=.*/GHCR_OWNER=${GHCR_OWNER}/" .env || echo "GHCR_OWNER=${GHCR_OWNER}" >> .env
+            ./scripts/deploy.sh
