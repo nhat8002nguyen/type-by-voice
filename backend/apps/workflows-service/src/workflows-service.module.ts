@@ -1,5 +1,5 @@
 import { InboxModule } from '@app/inbox';
-import { isObserveEnabled } from '@app/tracing';
+import { isObserveEnabled, shouldSynchronizeTypeOrm } from '@app/tracing';
 import { WORKFLOWS_CREATE_EVENT } from '@app/workflows';
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
@@ -46,7 +46,7 @@ class TranscriptsCoreModule {}
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'workflows',
       autoLoadEntities: true,
-      synchronize: process.env.NODE_ENV === 'development',
+      synchronize: shouldSynchronizeTypeOrm(),
     }),
     TranscriptsCoreModule,
     InboxModule.registerAsync({

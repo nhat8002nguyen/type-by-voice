@@ -1,5 +1,5 @@
 import { Inbox, InboxService } from '@app/inbox';
-import { isObserveEnabled } from '@app/tracing';
+import { isObserveEnabled, shouldSynchronizeTypeOrm } from '@app/tracing';
 import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -29,7 +29,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'notifications',
       autoLoadEntities: true,
-      synchronize: process.env.NODE_ENV === 'development',
+      synchronize: shouldSynchronizeTypeOrm(),
     }),
     TypeOrmModule.forFeature([Inbox]),
   ],
