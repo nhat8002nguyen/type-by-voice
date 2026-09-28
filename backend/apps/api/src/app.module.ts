@@ -1,7 +1,11 @@
 import { NOTIFICATIONS_SERVICE } from '@app/notifications';
 import { OutboxModule } from '@app/outbox';
 import { WORKFLOWS_SERVICE } from '@app/workflows';
-import { isObserveEnabled, RmqClientModule } from '@app/tracing';
+import {
+  isObserveEnabled,
+  RmqClientModule,
+  shouldSynchronizeTypeOrm,
+} from '@app/tracing';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { createObserveModule } from '@nestjs/observe';
@@ -36,7 +40,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       password: process.env.POSTGRES_PASSWORD ?? 'postgres',
       database: process.env.POSTGRES_DB ?? 'api',
       autoLoadEntities: true,
-      synchronize: process.env.NODE_ENV === 'development',
+      synchronize: shouldSynchronizeTypeOrm(),
     }),
     HealthModule,
     AuthModule,

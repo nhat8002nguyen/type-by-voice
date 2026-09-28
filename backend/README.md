@@ -1,5 +1,9 @@
 # Type by Voice — backend
 
+## Production
+
+Droplet deploy (Nginx, TLS, Compose, GitHub Actions): see [`../deploy/README.md`](../deploy/README.md).
+
 Nest 12 ESM monorepo. The only public process is `api` on port **3000** (HTTP + WebSocket `/v1/dictate`). Other apps are internal (NATS / RabbitMQ).
 
 Specs: [`docs/superpowers/specs/2026-09-13-backend-design.md`](../docs/superpowers/specs/2026-09-13-backend-design.md), [`docs/superpowers/specs/2026-09-13-dictation-protocol.md`](../docs/superpowers/specs/2026-09-13-dictation-protocol.md).
