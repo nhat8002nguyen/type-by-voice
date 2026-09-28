@@ -1,5 +1,6 @@
 import ApplicationServices
 import AVFoundation
+import CoreServices
 import Foundation
 
 enum PermissionState: Equatable {
@@ -42,6 +43,7 @@ final class PermissionService {
 
     /// Skippable — paste falls back to clipboard when denied.
     func requestAccessibility() {
+        _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         accessibility = trusted ? .granted : .denied

@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 import CoreGraphics
+import CoreServices
 import Foundation
 import UserNotifications
 
@@ -75,6 +76,9 @@ final class ClipboardPasteInserter: TextInserter {
     private func promptAccessibilityIfNeeded() {
         guard !didPromptAccessibility else { return }
         didPromptAccessibility = true
+        // Re-assert this running bundle before Settings refreshes the Accessibility
+        // list; otherwise a stale same-bundle-id build (often iconless) can win.
+        _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
