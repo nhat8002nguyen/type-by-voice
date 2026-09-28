@@ -10,29 +10,34 @@ EMAIL="${CERTBOT_EMAIL:?CERTBOT_EMAIL required}"
 CONF_DIR=./nginx/conf.d
 TLS_CONF="${CONF_DIR}/tbv-api.conf"
 TLS_TEMPLATE="${CONF_DIR}/tbv-api.tls.conf.example"
-BOOTSTRAP_EXAMPLE="${CONF_DIR}/tbv-api.http-bootstrap.conf.example"
 
-if [[ ! -f "${BOOTSTRAP_EXAMPLE}" ]]; then
-  echo "missing ${BOOTSTRAP_EXAMPLE}" >&2
-  exit 1
-fi
 if [[ ! -f "${TLS_TEMPLATE}" ]]; then
   echo "missing ${TLS_TEMPLATE}" >&2
   exit 1
 fi
 
-# Use HTTP-only site until certs exist (Nginx fails if ssl_certificate paths are missing).
-if [[ ! -f "./cert-data/.letsencrypt-ready" ]]; then
-  cp "${BOOTSTRAP_EXAMPLE}" "${TLS_CONF}"
-fi
+# ACME-only HTTP site (no api upstream) so nginx starts before GHCR images exist.
+cat > "${TLS_CONF}" <<EOF
+server {
+  listen 80;
+  server_name ${DOMAIN};
 
-docker compose up -d nginx api
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
 
-# Override the renew-loop entrypoint. Use --domains (not -d): Compose may treat
-# -d after the service name as `run --detach`, which then confuses the Docker CLI.
-# -- separates compose flags from the certbot command.
-docker compose run --rm --no-deps --entrypoint certbot certbot -- \
-  certonly \
+  location / {
+    return 503;
+  }
+}
+EOF
+
+# Only nginx is required for HTTP-01; do not pull Nest images here.
+docker compose up -d --no-deps nginx
+
+# Empty entrypoint overrides the renew-loop. Prefer --domains over -d (Compose detach).
+docker compose run --rm --no-deps --entrypoint "" certbot \
+  certbot certonly \
   --webroot -w /var/www/certbot \
   --email "$EMAIL" \
   --agree-tos \
@@ -42,10 +47,15 @@ docker compose run --rm --no-deps --entrypoint certbot certbot -- \
 mkdir -p ./cert-data
 touch ./cert-data/.letsencrypt-ready
 
-# Always restore full TLS site config from the durable template (not a bootstrap backup).
+# Restore full TLS site config from the durable template.
 cp "${TLS_TEMPLATE}" "${TLS_CONF}"
 
-docker compose up -d nginx
-docker compose exec nginx nginx -s reload
-
-echo "Certificate issued for ${DOMAIN}. TLS config restored from ${TLS_TEMPLATE}."
+# Nginx TLS conf proxies to api; that hostname exists only after the app stack is up.
+if docker compose up -d --no-deps nginx \
+  && docker compose exec -T nginx nginx -t \
+  && docker compose exec -T nginx nginx -s reload; then
+  echo "Certificate issued for ${DOMAIN}. TLS config restored from ${TLS_TEMPLATE}."
+else
+  echo "Certificate issued for ${DOMAIN}. TLS template written to ${TLS_CONF}."
+  echo "Start the full stack (./scripts/deploy.sh), then: docker compose exec nginx nginx -s reload"
+fi
