@@ -51,9 +51,10 @@ final class AppModelErrorTests: XCTestCase {
             "refreshToken": "r3",
             "expiresIn": 900,
         ])
+        let keychain = FakeKeychain(refresh: "r", access: "stale")
         let auth = AuthStore(
             http: http,
-            keychain: FakeKeychain(refresh: "r", access: "stale"),
+            keychain: keychain,
             deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!
         )
         auth.forceAccessToken("stale")
@@ -71,6 +72,8 @@ final class AppModelErrorTests: XCTestCase {
         model.completeOnboarding()
         XCTAssertFalse(model.needsLogin)
 
+        // forceReauthenticate/logout wiped tokens; simulate successful login restoring refresh.
+        keychain.refreshToken = "r-after-login"
         auth.forceAccessToken("stale-again")
         await model.handleUnauthenticated()
         XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 2)

@@ -38,10 +38,8 @@ final class AppModel: ObservableObject {
         audioCapture: AudioCaptureService = AudioCaptureService(
             prepareImmediately: ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         ),
-        engineURL: URL = URL(string: ProcessInfo.processInfo.environment["TBV_DICTATE_URL"]
-            ?? "ws://127.0.0.1:8080/v1/dictate")!,
-        apiBaseURL: URL = URL(string: ProcessInfo.processInfo.environment["TBV_API_URL"]
-            ?? "http://127.0.0.1:8080")!,
+        engineURL: URL = AppEndpoints.dictateURL(),
+        apiBaseURL: URL = AppEndpoints.apiBaseURL(),
         transcriptionEngine: TranscriptionEngine? = nil
     ) {
         let runningUnderXCTest =
