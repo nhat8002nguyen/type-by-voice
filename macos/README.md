@@ -56,12 +56,15 @@ Endpoints are baked from `.env` into the app Info.plist at package time (not har
 
 ### Publish public download link
 
+Uploads go to the **public** repo [`type-by-voice-releases`](https://github.com/nhat8002nguyen/type-by-voice-releases) (anonymous downloads while this app repo stays private):
+
 ```bash
+./macos/Scripts/package-dmg.sh
 ./macos/Scripts/publish-dmg-release.sh
-# prints https://github.com/<owner>/type-by-voice/releases/download/macos-v…/TypeByVoice-….dmg
+# prints https://github.com/nhat8002nguyen/type-by-voice-releases/releases/download/macos-v…/TypeByVoice-….dmg
 ```
 
-Share that URL with other Mac users. The GitHub repo (or Releases) must be **public** for anonymous downloads.
+Override destination with `TBV_RELEASE_REPO=owner/name` if needed.
 
 **For recipients**
 
