@@ -10,4 +10,7 @@ RUN npm ci
 COPY . .
 RUN npm run build -- ${APP_NAME}
 ENV NODE_ENV=production
+# Contracts package ships TypeScript with NodeNext `.js` imports; strip types + rewrite
+# `.js` → `.ts` at runtime (same hook as docker-compose.yml NODE_OPTIONS in development).
+ENV NODE_OPTIONS="--experimental-strip-types --import /usr/src/contracts/dictation-v1/ts-resolve.ts"
 CMD ["sh", "-c", "node dist/apps/${APP_NAME}/main.js"]

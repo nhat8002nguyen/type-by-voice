@@ -2,6 +2,8 @@ name: type-by-voice
 
 x-app-env: &app-env
   NODE_ENV: production
+  # Needed until images bake this into the Dockerfile ENV (contracts are TS at runtime).
+  NODE_OPTIONS: "--experimental-strip-types --import /usr/src/contracts/dictation-v1/ts-resolve.ts"
   NATS_SERVER_HOST: nats-server
   RABBITMQ_HOST: amqp://rabbitmq:5672
   REDIS_HOST: redis
@@ -115,7 +117,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: api
     volumes:
-      - api-db-data:/var/lib/postgresql/data
+      # Postgres 18+ images expect the volume at /var/lib/postgresql (not .../data).
+      - api-db-data:/var/lib/postgresql
     deploy:
       resources:
         limits:
@@ -130,7 +133,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: quota
     volumes:
-      - quota-db-data:/var/lib/postgresql/data
+      - quota-db-data:/var/lib/postgresql
     deploy:
       resources:
         limits:
@@ -145,7 +148,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: workflows
     volumes:
-      - workflows-db-data:/var/lib/postgresql/data
+      - workflows-db-data:/var/lib/postgresql
     deploy:
       resources:
         limits:
@@ -160,7 +163,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: notifications
     volumes:
-      - notifications-db-data:/var/lib/postgresql/data
+      - notifications-db-data:/var/lib/postgresql
     deploy:
       resources:
         limits:
