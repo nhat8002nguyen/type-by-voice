@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Produce a shareable `TypeByVoice.dmg` (ad-hoc / unsigned Release build) whose API endpoints come from `macos/.env` (not hardcoded), and remain usable when billing/upgrade ships later.
+**Goal:** Produce a shareable `TypeByVoice.dmg` (ad-hoc / unsigned Release build) whose API endpoints come from `macos/.env` (not hardcoded), publish it to a **public GitHub Release** download URL, and remain usable when billing/upgrade ships later.
 
-**Architecture:** `package-dmg.sh` sources `macos/.env`, builds Release (existing ad-hoc `CODE_SIGN_IDENTITY = "-"`), writes `TBV_API_URL` / `TBV_DICTATE_URL` into the app `Info.plist`, then wraps the app in a DMG via `hdiutil`. The app resolves endpoints as: process env → Info.plist → Debug localhost fallback. No Developer ID, notarization, Sparkle, or CI upload.
+**Architecture:** `package-dmg.sh` sources `macos/.env`, builds Release (existing ad-hoc `CODE_SIGN_IDENTITY = "-"`), writes `TBV_API_URL` / `TBV_DICTATE_URL` into the app `Info.plist`, then wraps the app in a DMG via `hdiutil`. `publish-dmg-release.sh` uploads that DMG with `gh release create` so anyone gets a stable HTTPS link. The app resolves endpoints as: process env → Info.plist → Debug localhost fallback. No Developer ID, notarization, Sparkle, or CI upload (manual `gh` publish is enough).
 
-**Tech Stack:** `xcodebuild`, ad-hoc codesign (already configured), `hdiutil`, zsh, `macos/.env` + `.env.example`.
+**Tech Stack:** `xcodebuild`, ad-hoc codesign (already configured), `hdiutil`, `gh`, zsh, `macos/.env` + `.env.example`.
 
 **Spec:** Informal request (free share, no Apple Developer ID). Aligns with deferred items in `docs/superpowers/specs/2026-09-13-macos-client-design.md` — this plan covers **only** an unsigned DMG; signing/notarization/auto-update stay out of scope.
 
@@ -25,14 +25,17 @@
 ```
 macos/.env.example                 # NEW — TBV_API_URL / TBV_DICTATE_URL placeholders
 macos/.env                         # LOCAL ONLY — copy from example; never commit
-macos/Scripts/package-dmg.sh       # NEW — source .env, Release build, inject plist, DMG
-macos/TypeByVoice/App/AppEndpoints.swift   # NEW — URL resolution helper
-macos/TypeByVoice/App/AppModel.swift       # MODIFY — use AppEndpoints
+macos/Scripts/package-dmg.sh            # NEW — source .env, Release build, inject plist, DMG
+macos/Scripts/publish-dmg-release.sh     # NEW — gh release create + public asset URL
+macos/Scripts/build-and-run-prod.sh      # MODIFY — source macos/.env (no hardcoded hosts)
+macos/Scripts/run-prod.sh                # MODIFY — same
+macos/TypeByVoice/App/AppEndpoints.swift # NEW — URL resolution helper
+macos/TypeByVoice/App/AppModel.swift     # MODIFY — use AppEndpoints
 macos/TypeByVoiceTests/AppEndpointsTests.swift  # NEW
-macos/README.md                    # MODIFY — .env + DMG + Gatekeeper notes
+macos/README.md                          # MODIFY — .env + DMG + Release link + Gatekeeper
 ```
 
-Existing (do not reinvent): `build-and-run.sh`, `run.sh`. If `build-and-run-prod.sh` / `run-prod.sh` exist on the branch, point them at `macos/.env` instead of hardcoded URLs.
+Existing (do not reinvent): `build-and-run.sh`, `run.sh`.
 
 ---
 
@@ -327,7 +330,98 @@ git add macos/Scripts/package-dmg.sh macos/README.md
 git commit -m "feat(macos): add unsigned DMG packaging from macos/.env"
 ```
 
-Add `macos/dist/` to `.gitignore` if not already covered by root `dist/`.
+Root `.gitignore` already has `dist/` (covers `macos/dist/`).
+
+---
+
+### Task 3: Public download via GitHub Release
+
+**Files:**
+- Create: `macos/Scripts/publish-dmg-release.sh`
+- Modify: `macos/README.md` (download URL section)
+
+**Interfaces:**
+- Consumes: a DMG path (default: newest `macos/dist/TypeByVoice-*.dmg`), `gh` auth, repo `nhat8002nguyen/type-by-voice`
+- Produces: GitHub Release tag `macos-v<version>+<build>` with the DMG asset; prints the public asset URL
+
+- [ ] **Step 1: Write `macos/Scripts/publish-dmg-release.sh`**
+
+```zsh
+#!/bin/zsh
+# Upload a packaged DMG to a public GitHub Release and print the download URL.
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+MACOS_ROOT="${SCRIPT_DIR:h}"
+DIST_DIR="${TBV_DIST_DIR:-$MACOS_ROOT/dist}"
+
+DMG_PATH="${1:-}"
+if [[ -z "$DMG_PATH" ]]; then
+  DMG_PATH="$(ls -t "$DIST_DIR"/TypeByVoice-*.dmg 2>/dev/null | head -1 || true)"
+fi
+if [[ -z "$DMG_PATH" || ! -f "$DMG_PATH" ]]; then
+  echo "error: no DMG found — run macos/Scripts/package-dmg.sh first (or pass a path)" >&2
+  exit 1
+fi
+
+BASE="$(basename "$DMG_PATH" .dmg)"          # TypeByVoice-1.0.0+1
+VERSION_BUILD="${BASE#TypeByVoice-}"         # 1.0.0+1
+TAG="macos-v${VERSION_BUILD}"
+TITLE="TypeByVoice macOS ${VERSION_BUILD} (unsigned)"
+
+NOTES="$(cat <<EOF
+Unsigned / ad-hoc-signed macOS build for free sharing (not notarized).
+
+**Install**
+1. Download the \`.dmg\`, open it, drag TypeByVoice to Applications.
+2. First launch: right-click TypeByVoice → **Open** (Gatekeeper).
+3. Enable Microphone + Accessibility when prompted.
+
+Endpoints were baked from the packager's \`macos/.env\` at build time.
+EOF
+)"
+
+echo "==> Creating GitHub Release ${TAG} with $(basename "$DMG_PATH")"
+gh release create "$TAG" "$DMG_PATH" \
+  --title "$TITLE" \
+  --notes "$NOTES"
+
+REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+ASSET="$(basename "$DMG_PATH")"
+# '+' in asset names is %2B in release asset URLs
+ASSET_ENC="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$ASSET")"
+URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_ENC}"
+echo "==> Public download URL:"
+echo "$URL"
+echo "    (or releases page: https://github.com/${REPO}/releases/tag/${TAG})"
+```
+
+`chmod +x macos/Scripts/publish-dmg-release.sh`
+
+- [ ] **Step 2: Document publish flow in README**
+
+After the DMG section, add:
+
+```markdown
+### Publish public download link
+
+\`\`\`bash
+./macos/Scripts/package-dmg.sh
+./macos/Scripts/publish-dmg-release.sh
+# prints https://github.com/<owner>/type-by-voice/releases/download/macos-v…/TypeByVoice-….dmg
+\`\`\`
+
+Share that URL with other Mac users. Repo (or at least Releases) must be **public** for anonymous downloads.
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add macos/Scripts/publish-dmg-release.sh macos/README.md
+git commit -m "feat(macos): publish unsigned DMG to GitHub Releases"
+```
+
+Do **not** run `publish-dmg-release.sh` in CI for this plan; the human runs it when ready to share. First publish requires `gh auth` and a public repo (or public release assets).
 
 ---
 
@@ -335,14 +429,14 @@ Add `macos/dist/` to `.gitignore` if not already covered by root `dist/`.
 
 - Apple Developer Program / Developer ID / notarization / Stapling
 - Sparkle or any auto-updater
-- GitHub Actions that upload DMGs
+- GitHub Actions that auto-build/upload DMGs on every push
 - Billing UI, StoreKit, Stripe checkout in the macOS app
 - Changing bundle ID or installer `.pkg`
 - Hardcoded production URLs in Swift or shell
 
 ## Self-review
 
-1. **Spec coverage:** Free share without Developer ID → Task 2. Endpoints from `.env` → Tasks 1–2. Billing-ready later → `ClientVersion` + version bump note. Gatekeeper → README.
+1. **Spec coverage:** Free share without Developer ID → Task 2. Endpoints from `.env` → Tasks 1–2. Public download link → Task 3. Billing-ready later → `ClientVersion` + version bump note. Gatekeeper → README.
 2. **Placeholders:** None.
 3. **Consistency:** Example values in `.env.example` may show the current prod host as documentation only; runtime/source must not hardcode them as the only path.
 
