@@ -19,8 +19,14 @@ As root on an Ubuntu droplet:
 
 ```bash
 apt-get update && apt-get install -y git
-# Install Docker Engine + Compose plugin (official Docker docs):
+# Docker Engine (Ubuntu package) + Compose V2 plugin:
+apt-get install -y docker.io docker-compose-v2
+# Or follow official Docker Engine docs:
 # https://docs.docker.com/engine/install/ubuntu/
+# then: apt-get install -y docker-compose-plugin
+
+# Confirm Compose works (required — scripts use `docker compose`, not `docker-compose`):
+docker compose version
 
 mkdir -p /opt/type-by-voice
 git clone git@github.com:OWNER/type-by-voice.git /opt/type-by-voice
@@ -55,23 +61,22 @@ GHCR_USER=your-github-username GHCR_TOKEN=ghp_... ./scripts/ghcr-login.sh
 
 ## First TLS cert
 
-Nginx will not start with the TLS site config until certificate files exist. Prefer letting `init-letsencrypt.sh` manage the bootstrap → issue → TLS restore sequence:
+`init-letsencrypt.sh` starts **nginx only** (ACME HTTP-01 on port 80), issues the cert, then writes the TLS site config from `tbv-api.tls.conf.example`. Nest/GHCR images are **not** required for this step.
 
 ```bash
 cd /opt/type-by-voice/deploy
-export IMAGE_TAG=latest GHCR_OWNER=your-owner
-# Optional: start api first so health checks work; init also starts nginx+api.
-./scripts/deploy.sh
+# DNS must already point here: dig +short tbv-api.nate-ng.com
 ./scripts/init-letsencrypt.sh
 ```
 
 What the script does:
 
-1. If `./cert-data/.letsencrypt-ready` is missing, installs the HTTP-only bootstrap (`tbv-api.http-bootstrap.conf.example` → `tbv-api.conf`).
-2. Starts `nginx` + `api`, then runs `certbot certonly` (HTTP-01 webroot).
-3. Marks certs ready, copies the durable TLS template (`nginx/conf.d/tbv-api.tls.conf.example` → `tbv-api.conf`), and reloads nginx.
+1. Writes an ACME-only HTTP site config (no `api` upstream) so nginx can start without the app stack.
+2. `docker compose up -d --no-deps nginx`, then `certbot certonly` (HTTP-01 webroot).
+3. Marks certs ready, copies `nginx/conf.d/tbv-api.tls.conf.example` → `tbv-api.conf`.
+4. Reloads nginx if possible; if `api` is not on the network yet, finish with `./scripts/deploy.sh` then `docker compose exec nginx nginx -s reload`.
 
-Do **not** manually overwrite `tbv-api.conf` with bootstrap and expect a `.tls.bak` restore — that path is gone. Keep `tbv-api.tls.conf.example` in git as the source of truth for HTTPS.
+Keep `tbv-api.tls.conf.example` in git as the source of truth for HTTPS.
 
 Certbot renew runs every 12 hours via `scripts/certbot-loop.sh`. After a successful renew that writes new certs, the loop reloads nginx through the Docker socket (`docker exec … nginx -s reload`). Mounting `docker.sock` into certbot is a security tradeoff; keep the certbot image tag pinned.
 
