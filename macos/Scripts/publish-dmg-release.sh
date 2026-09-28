@@ -1,10 +1,12 @@
 #!/bin/zsh
-# Upload a packaged DMG to a public GitHub Release and print the download URL.
+# Upload a packaged DMG to the public releases repo and print the download URL.
+# Default host: nhat8002nguyen/type-by-voice-releases (public). Override with TBV_RELEASE_REPO.
 set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 MACOS_ROOT="${SCRIPT_DIR:h}"
 DIST_DIR="${TBV_DIST_DIR:-$MACOS_ROOT/dist}"
+RELEASE_REPO="${TBV_RELEASE_REPO:-nhat8002nguyen/type-by-voice-releases}"
 
 DMG_PATH="${1:-}"
 if [[ -z "$DMG_PATH" ]]; then
@@ -28,19 +30,20 @@ Unsigned / ad-hoc-signed macOS build for free sharing (not notarized).
 2. First launch: right-click TypeByVoice → **Open** (Gatekeeper).
 3. Enable Microphone + Accessibility when prompted.
 
-Endpoints were baked from the packager's \`macos/.env\` at build time.
+App source stays in the private \`type-by-voice\` repo. This repo only hosts installers.
 EOF
 )"
 
-echo "==> Creating GitHub Release ${TAG} with $(basename "$DMG_PATH")"
+echo "==> Creating GitHub Release ${TAG} on ${RELEASE_REPO} with $(basename "$DMG_PATH")"
 gh release create "$TAG" "$DMG_PATH" \
+  --repo "$RELEASE_REPO" \
   --title "$TITLE" \
   --notes "$NOTES"
 
-REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 ASSET="$(basename "$DMG_PATH")"
-ASSET_ENC="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$ASSET")"
-URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_ENC}"
+TAG_ENC="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$TAG")"
+ASSET_ENC="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$ASSET")"
+URL="https://github.com/${RELEASE_REPO}/releases/download/${TAG_ENC}/${ASSET_ENC}"
 echo "==> Public download URL:"
 echo "$URL"
-echo "    (or releases page: https://github.com/${REPO}/releases/tag/${TAG})"
+echo "    (or releases page: https://github.com/${RELEASE_REPO}/releases/tag/${TAG_ENC})"
