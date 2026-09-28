@@ -26,13 +26,27 @@ xcodebuild \
   -derivedDataPath "$DERIVED_DATA" \
   build
 
-echo "==> Resetting Accessibility for ${BUNDLE_ID}"
-"${SCRIPT_DIR}/reset-accessibility.sh" "${BUNDLE_ID}"
-
 if [[ ! -d "$APP" ]]; then
   echo "error: app not found at $APP" >&2
   exit 1
 fi
+
+# Prefer this build in Launch Services so System Settings (Accessibility, etc.)
+# resolves the real AppIcon. Other copies (worktrees, /tmp DerivedData) with the
+# same bundle ID can win the Accessibility refresh and show a generic icon.
+LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [[ -x "$LSREG" ]]; then
+  echo "==> Preferring $APP in Launch Services"
+  while IFS= read -r other; do
+    [[ -z "$other" || "$other" == "$APP" ]] && continue
+    echo "    unregister $other"
+    "$LSREG" -u "$other" >/dev/null 2>&1 || true
+  done < <(mdfind "kMDItemCFBundleIdentifier == '${BUNDLE_ID}'" 2>/dev/null || true)
+  "$LSREG" -f -R "$APP" >/dev/null 2>&1 || true
+fi
+
+echo "==> Resetting Accessibility for ${BUNDLE_ID}"
+"${SCRIPT_DIR}/reset-accessibility.sh" "${BUNDLE_ID}"
 
 echo "==> Launching $APP"
 echo "    TBV_API_URL=${TBV_API_URL}"
