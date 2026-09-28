@@ -28,12 +28,16 @@ fi
 
 docker compose up -d nginx api
 
-docker compose run --rm --entrypoint certbot certbot certonly \
+# Override the renew-loop entrypoint. Use --domains (not -d): Compose may treat
+# -d after the service name as `run --detach`, which then confuses the Docker CLI.
+# -- separates compose flags from the certbot command.
+docker compose run --rm --no-deps --entrypoint certbot certbot -- \
+  certonly \
   --webroot -w /var/www/certbot \
   --email "$EMAIL" \
   --agree-tos \
   --no-eff-email \
-  -d "$DOMAIN"
+  --domains "$DOMAIN"
 
 mkdir -p ./cert-data
 touch ./cert-data/.letsencrypt-ready
