@@ -64,11 +64,11 @@ waits exist to prevent.
 Three things happen concurrently. None of them is “listening” yet.
 
 1. The audio tap starts. Before installing the tap, `AudioCaptureService`
-   resolves a usable input via `AudioInputDeviceManager`: keep the system
-   default when it has input channels; otherwise prefer Continuity Camera
-   (iPhone, transport `'ccwd'`), then any other non-built-in mic. Binding is
-   app-local on the engine’s input AudioUnit — the system Sound default is
-   not changed. Details:
+   resolves a usable input via `AudioInputDeviceManager`: when the MacBook lid
+   is closed, prefer Continuity Camera (iPhone, transport `'ccwd'` / `'ccwl'`);
+   when the lid is open, keep the usable system default (built-in Mac mic).
+   Binding is app-local on the engine’s input AudioUnit — the system Sound
+   default is not changed. Details:
    `2026-09-28-continuity-microphone-fallback-design.md`.
    `AVAudioEngine` is prepared once at app launch and kept ready, so starting
    a capture costs milliseconds rather than tens when a device is available.
@@ -221,7 +221,7 @@ one token refresh and reconnect attempt before surfacing a login prompt.
 
 Unit tests cover the ring buffer, `SilenceDetector` against synthesised noisy
 and quiet audio, encoder framing, `AudioInputDeviceManager` selection policy
-(usable default kept; Continuity preferred only when default is unusable;
+(Continuity preferred over built-in default; USB/BT default kept;
 `nil` when nothing usable), the Connecting → Recording gate (no listening
 UI before frames + `ready`; flush of the pre-`ready` buffer), and — importantly
 — every timeout path in the state machine, since those are the behaviours that

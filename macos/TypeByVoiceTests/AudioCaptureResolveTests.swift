@@ -43,5 +43,7 @@ final class AudioCaptureResolveTests: XCTestCase {
         let bound = try capture.resolveAndBindInput(audioUnit: nil)
         XCTAssertEqual(bound.uid, "usb-uid")
         XCTAssertEqual(capture.activeInputUID, "usb-uid")
+        capture.stopCapture()
+        XCTAssertNil(capture.activeInputUID)
     }
 }

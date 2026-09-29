@@ -21,10 +21,10 @@ usable local input” and route to the Continuity mic.
 
 ## Goal
 
-When starting capture, if the current default input is not usable, automatically
-prefer a Continuity Camera (iPhone) microphone, then any other non-built-in
-input. Do not change the user’s system Sound default. Do not switch when a
-usable local input already exists.
+When starting capture: if the MacBook lid is closed and Continuity Camera
+(iPhone) mic is available, bind Continuity automatically. If the lid is open,
+keep the usable system default (built-in Mac mic). Do not change the user’s
+system Sound default.
 
 ## Non-goals (v1)
 
@@ -77,7 +77,7 @@ AudioCaptureService.startCapture()
 | `name` | `String` | Localized name for logs / future UI |
 | `transportType` | `UInt32` | From `kAudioDevicePropertyTransportType` |
 | `isBuiltIn` | `Bool` | `transportType == kAudioDeviceTransportTypeBuiltIn` |
-| `isContinuity` | `Bool` | `transportType == 0x63637764` (`'ccwd'`) |
+| `isContinuity` | `Bool` | `transportType` is Continuity Capture wired (`'ccwd'`) or wireless (`'ccwl'`) |
 
 A device is **usable** if it has at least one input channel
 (`kAudioDevicePropertyStreamConfiguration` on the input scope with
@@ -97,10 +97,15 @@ Pure CoreAudio helper (no `AVAudioEngine` ownership):
 
 Selection policy for `resolveCaptureDevice()`:
 
-1. If `defaultInput()` is usable → return it (no Continuity preference).
-2. Else prefer the first Continuity (`isContinuity`) usable input.
-3. Else prefer the first non-built-in usable input.
-4. Else return `nil`.
+1. If a physical external mic is available (Bluetooth / USB / etc.) → use it
+   (system default if it is one of those; otherwise the first such device).
+   Never force Continuity over headphones.
+2. Else if the MacBook lid is closed and Continuity is present → Continuity.
+3. Else if `defaultInput()` is usable (built-in with lid open, etc.) → return it.
+4. Else prefer Continuity if present, then other non-built-in inputs (e.g. virtual).
+5. Else return `nil`.
+
+Virtual loopbacks (BlackHole, Teams) are **not** treated as physical externals.
 
 ### `AudioCaptureService` changes
 
@@ -147,8 +152,8 @@ the iPhone connects). No background polling required for v1.
 
 | Situation | Behavior |
 |---|---|
-| Default input usable | Use it; no Continuity switch |
-| Default unusable, Continuity present | Bind Continuity; continue |
+| Default is built-in or missing, Continuity present | Bind Continuity; continue |
+| Default is usable USB/BT | Use it; no Continuity switch |
 | Default unusable, no Continuity, USB/BT mic present | Bind that external input |
 | No usable inputs at all | Immediate `no_input_device` failure |
 | Continuity bound but no frames within connecting timeout | Existing connecting timeout / abort |
@@ -164,9 +169,13 @@ Unit-test `AudioInputDeviceManager` selection with a injectable device list
 
 | Case | Expected |
 |---|---|
-| Usable default (built-in or USB) | Returns default; ignores Continuity |
+| Lid open + built-in default + Continuity present | Returns built-in |
+| Lid closed + Continuity present (no BT/USB) | Returns Continuity |
+| Lid closed + Bluetooth present + Continuity | Returns Bluetooth |
+| Lid closed + USB default + Continuity | Returns USB |
+| Lid open + usable USB/BT default + Continuity | Returns USB/BT |
+| Lid closed + BlackHole virtual + Continuity | Returns Continuity (virtual ignored) |
 | Unusable / missing default + Continuity present | Returns Continuity |
-| Unusable default + no Continuity + USB present | Returns USB |
 | Empty / all unusable | Returns `nil` |
 
 `AudioCaptureService` tests: with a fake manager returning `nil`,
@@ -196,8 +205,8 @@ Manual verification (developer machine):
 
 ## Success criteria
 
-- Clamshell + Continuity iPhone mic → dictation records without plugging a
-  dedicated headset/USB mic.
-- Open lid / usable default → behavior unchanged (no forced Continuity).
+- Clamshell / built-in default + Continuity iPhone mic → dictation uses iPhone
+  without changing System Sound default.
+- USB/BT as system default → that device kept (no forced Continuity).
 - System Sound → Input preference left alone.
 - No usable mic → user-visible error with Continuity hint, not silent failure.

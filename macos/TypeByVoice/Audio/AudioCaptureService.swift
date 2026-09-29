@@ -54,7 +54,10 @@ final class AudioCaptureService: AudioCaptureStarting {
         prepareEngine()
         guard let engine, !isTapInstalled else { return }
 
-        _ = try resolveAndBindInput(audioUnit: engine.inputNode.audioUnit)
+        guard let audioUnit = engine.inputNode.audioUnit else {
+            throw AudioCaptureStartError.noInputDevice
+        }
+        _ = try resolveAndBindInput(audioUnit: audioUnit)
 
         let input = engine.inputNode
         let inputFormat = input.inputFormat(forBus: 0)
@@ -124,15 +127,24 @@ final class AudioCaptureService: AudioCaptureStarting {
     }
 
     func stopCapture() {
-        guard let engine else { return }
+        activeInputUID = nil
+        guard let engine else {
+            isTapInstalled = false
+            isPrepared = false
+            return
+        }
         if isTapInstalled {
             engine.inputNode.removeTap(onBus: 0)
             isTapInstalled = false
         }
         if engine.isRunning {
             engine.stop()
-            engine.prepare()
         }
+        // Continuity Camera keeps the AU session until the engine is released.
+        // Reusing the same AVAudioEngine makes the next CurrentDevice set a no-op
+        // and the iPhone never reconnects — tear down so the next start rebinds.
+        self.engine = nil
+        isPrepared = false
     }
 
     private nonisolated static func convert(

@@ -10,6 +10,10 @@ private struct FakeListing: AudioInputDeviceListing {
     func listedDefaultInputID() -> AudioDeviceID? { defaultID }
 }
 
+private struct FakeLidState: LidStateProviding {
+    var isLidClosed: Bool
+}
+
 private func device(
     id: AudioDeviceID,
     uid: String,
@@ -24,9 +28,20 @@ private func device(
     )
 }
 
+private func manager(
+    inputs: [AudioInputDevice],
+    defaultID: AudioDeviceID?,
+    lidClosed: Bool
+) -> AudioInputDeviceManager {
+    AudioInputDeviceManager(
+        listing: FakeListing(inputs: inputs, defaultID: defaultID),
+        lidState: FakeLidState(isLidClosed: lidClosed)
+    )
+}
+
 @MainActor
 final class AudioInputDeviceManagerTests: XCTestCase {
-    func testUsableDefaultPreferredOverContinuity() {
+    func testLidOpenKeepsBuiltInDefaultOverContinuity() {
         let builtIn = device(
             id: 1,
             uid: "builtin",
@@ -37,20 +52,112 @@ final class AudioInputDeviceManagerTests: XCTestCase {
             id: 2,
             uid: "iphone",
             name: "iPhone Mic",
-            transport: AudioInputDeviceTransport.continuity
+            transport: AudioInputDeviceTransport.continuityWireless
         )
-        let manager = AudioInputDeviceManager(
-            listing: FakeListing(inputs: [builtIn, continuity], defaultID: 1)
-        )
-        XCTAssertEqual(manager.resolveCaptureDevice(), builtIn)
+        let resolved = manager(
+            inputs: [builtIn, continuity],
+            defaultID: 1,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, builtIn)
     }
 
-    func testContinuityWhenDefaultMissing() {
+    func testLidClosedPrefersContinuityOverBuiltInDefault() {
+        let builtIn = device(
+            id: 1,
+            uid: "builtin",
+            name: "MacBook Mic",
+            transport: kAudioDeviceTransportTypeBuiltIn
+        )
         let continuity = device(
             id: 2,
             uid: "iphone",
             name: "iPhone Mic",
-            transport: AudioInputDeviceTransport.continuity
+            transport: AudioInputDeviceTransport.continuityWireless
+        )
+        let resolved = manager(
+            inputs: [builtIn, continuity],
+            defaultID: 1,
+            lidClosed: true
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, continuity)
+    }
+
+    func testLidClosedPrefersContinuityWiredOverBuiltInDefault() {
+        let builtIn = device(
+            id: 1,
+            uid: "builtin",
+            name: "MacBook Mic",
+            transport: kAudioDeviceTransportTypeBuiltIn
+        )
+        let continuity = device(
+            id: 2,
+            uid: "iphone-wired",
+            name: "iPhone Mic",
+            transport: AudioInputDeviceTransport.continuityWired
+        )
+        let resolved = manager(
+            inputs: [builtIn, continuity],
+            defaultID: 1,
+            lidClosed: true
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, continuity)
+    }
+
+    func testBluetoothPreferredOverContinuityWhenLidClosed() {
+        let continuity = device(
+            id: 2,
+            uid: "iphone",
+            name: "iPhone Mic",
+            transport: AudioInputDeviceTransport.continuityWireless
+        )
+        let bluetooth = device(
+            id: 4,
+            uid: "bt-headset",
+            name: "AirPods",
+            transport: kAudioDeviceTransportTypeBluetooth
+        )
+        let builtIn = device(
+            id: 1,
+            uid: "builtin",
+            name: "MacBook Mic",
+            transport: kAudioDeviceTransportTypeBuiltIn
+        )
+        let resolved = manager(
+            inputs: [builtIn, continuity, bluetooth],
+            defaultID: 1,
+            lidClosed: true
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, bluetooth)
+    }
+
+    func testBluetoothDefaultPreferredOverContinuityWhenLidOpen() {
+        let continuity = device(
+            id: 2,
+            uid: "iphone",
+            name: "iPhone Mic",
+            transport: AudioInputDeviceTransport.continuityWireless
+        )
+        let bluetooth = device(
+            id: 4,
+            uid: "bt-headset",
+            name: "AirPods",
+            transport: kAudioDeviceTransportTypeBluetooth
+        )
+        let resolved = manager(
+            inputs: [bluetooth, continuity],
+            defaultID: 4,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, bluetooth)
+    }
+
+    func testUSBPreferredOverContinuityWhenLidClosed() {
+        let continuity = device(
+            id: 2,
+            uid: "iphone",
+            name: "iPhone Mic",
+            transport: AudioInputDeviceTransport.continuityWireless
         )
         let usb = device(
             id: 3,
@@ -58,10 +165,82 @@ final class AudioInputDeviceManagerTests: XCTestCase {
             name: "USB Mic",
             transport: kAudioDeviceTransportTypeUSB
         )
-        let manager = AudioInputDeviceManager(
-            listing: FakeListing(inputs: [usb, continuity], defaultID: nil)
+        let resolved = manager(
+            inputs: [usb, continuity],
+            defaultID: 3,
+            lidClosed: true
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, usb)
+    }
+
+    func testVirtualLoopbackDoesNotBlockContinuityWhenLidClosed() {
+        let builtIn = device(
+            id: 1,
+            uid: "builtin",
+            name: "MacBook Mic",
+            transport: kAudioDeviceTransportTypeBuiltIn
         )
-        XCTAssertEqual(manager.resolveCaptureDevice(), continuity)
+        let continuity = device(
+            id: 2,
+            uid: "iphone",
+            name: "iPhone Mic",
+            transport: AudioInputDeviceTransport.continuityWireless
+        )
+        let blackHole = device(
+            id: 5,
+            uid: "BlackHole2ch_UID",
+            name: "BlackHole 2ch",
+            transport: kAudioDeviceTransportTypeVirtual
+        )
+        let resolved = manager(
+            inputs: [builtIn, blackHole, continuity],
+            defaultID: 1,
+            lidClosed: true
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, continuity)
+    }
+
+    func testLidOpenKeepsUSBDefaultOverContinuity() {
+        let continuity = device(
+            id: 2,
+            uid: "iphone",
+            name: "iPhone Mic",
+            transport: AudioInputDeviceTransport.continuityWireless
+        )
+        let usb = device(
+            id: 3,
+            uid: "usb",
+            name: "USB Mic",
+            transport: kAudioDeviceTransportTypeUSB
+        )
+        let resolved = manager(
+            inputs: [usb, continuity],
+            defaultID: 3,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, usb)
+    }
+
+    func testLidOpenPrefersUSBOverContinuityWhenDefaultMissing() {
+        let continuity = device(
+            id: 2,
+            uid: "iphone",
+            name: "iPhone Mic",
+            transport: AudioInputDeviceTransport.continuityWireless
+        )
+        let usb = device(
+            id: 3,
+            uid: "usb",
+            name: "USB Mic",
+            transport: kAudioDeviceTransportTypeUSB
+        )
+        let resolved = manager(
+            inputs: [usb, continuity],
+            defaultID: nil,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        // USB is a physical external — it wins even when not the system default.
+        XCTAssertEqual(resolved, usb)
     }
 
     func testUnusableDefaultIDNotInInputsFallsThroughToContinuity() {
@@ -69,12 +248,14 @@ final class AudioInputDeviceManagerTests: XCTestCase {
             id: 2,
             uid: "iphone",
             name: "iPhone Mic",
-            transport: AudioInputDeviceTransport.continuity
+            transport: AudioInputDeviceTransport.continuityWireless
         )
-        let manager = AudioInputDeviceManager(
-            listing: FakeListing(inputs: [continuity], defaultID: 99)
-        )
-        XCTAssertEqual(manager.resolveCaptureDevice(), continuity)
+        let resolved = manager(
+            inputs: [continuity],
+            defaultID: 99,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, continuity)
     }
 
     func testUSBWhenNoContinuityAndNoDefault() {
@@ -90,34 +271,55 @@ final class AudioInputDeviceManagerTests: XCTestCase {
             name: "MacBook Mic",
             transport: kAudioDeviceTransportTypeBuiltIn
         )
-        let manager = AudioInputDeviceManager(
-            listing: FakeListing(inputs: [builtIn, usb], defaultID: nil)
-        )
-        XCTAssertEqual(manager.resolveCaptureDevice(), usb)
+        let resolved = manager(
+            inputs: [builtIn, usb],
+            defaultID: nil,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        XCTAssertEqual(resolved, usb)
     }
 
     func testEmptyReturnsNil() {
-        let manager = AudioInputDeviceManager(
-            listing: FakeListing(inputs: [], defaultID: nil)
-        )
-        XCTAssertNil(manager.resolveCaptureDevice())
+        let resolved = manager(
+            inputs: [],
+            defaultID: nil,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        XCTAssertNil(resolved)
     }
 
     func testOnlyUnusableBuiltInWithDefaultIDMissingFromListReturnsNil() {
-        let manager = AudioInputDeviceManager(
-            listing: FakeListing(inputs: [], defaultID: 1)
-        )
-        XCTAssertNil(manager.resolveCaptureDevice())
+        let resolved = manager(
+            inputs: [],
+            defaultID: 1,
+            lidClosed: false
+        ).resolveCaptureDevice()
+        XCTAssertNil(resolved)
     }
 
     func testContinuityFlagOnDevice() {
-        let continuity = device(
+        let wireless = device(
             id: 2,
             uid: "iphone",
             name: "iPhone Mic",
-            transport: AudioInputDeviceTransport.continuity
+            transport: AudioInputDeviceTransport.continuityWireless
         )
-        XCTAssertTrue(continuity.isContinuity)
-        XCTAssertFalse(continuity.isBuiltIn)
+        let wired = device(
+            id: 3,
+            uid: "iphone-wired",
+            name: "iPhone Mic Cable",
+            transport: AudioInputDeviceTransport.continuityWired
+        )
+        XCTAssertTrue(wireless.isContinuity)
+        XCTAssertTrue(wired.isContinuity)
+        XCTAssertFalse(wireless.isBuiltIn)
+        XCTAssertEqual(
+            AudioInputDeviceTransport.continuityWireless,
+            kAudioDeviceTransportTypeContinuityCaptureWireless
+        )
+        XCTAssertEqual(
+            AudioInputDeviceTransport.continuityWired,
+            kAudioDeviceTransportTypeContinuityCaptureWired
+        )
     }
 }

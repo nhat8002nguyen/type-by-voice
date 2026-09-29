@@ -131,9 +131,14 @@ struct LiveCoreAudioListing: AudioInputDeviceListing {
 
 final class AudioInputDeviceManager {
     private let listing: AudioInputDeviceListing
+    private let lidState: LidStateProviding
 
-    init(listing: AudioInputDeviceListing = LiveCoreAudioListing()) {
+    init(
+        listing: AudioInputDeviceListing = LiveCoreAudioListing(),
+        lidState: LidStateProviding = IOPMClamshellStateProvider()
+    ) {
         self.listing = listing
+        self.lidState = lidState
     }
 
     func allInputs() -> [AudioInputDevice] {
@@ -146,14 +151,33 @@ final class AudioInputDeviceManager {
     }
 
     func resolveCaptureDevice() -> AudioInputDevice? {
-        if let defaultInput = defaultInput() {
+        let inputs = allInputs()
+        let defaultInput = defaultInput()
+        let continuity = inputs.first(where: \.isContinuity)
+        let physicalExternals = inputs.filter(\.isPhysicalExternal)
+
+        // Bluetooth / USB headphones always win over Continuity (either lid state).
+        if let defaultInput, defaultInput.isPhysicalExternal {
             return defaultInput
         }
-        let inputs = allInputs()
-        if let continuity = inputs.first(where: \.isContinuity) {
+        if let physical = physicalExternals.first {
+            return physical
+        }
+
+        // No headset: lid closed → Continuity; lid open → system default (built-in).
+        if lidState.isLidClosed, let continuity {
             return continuity
         }
-        return inputs.first { !$0.isBuiltIn }
+
+        if let defaultInput {
+            return defaultInput
+        }
+
+        if let continuity {
+            return continuity
+        }
+
+        return inputs.first { !$0.isBuiltIn && !$0.isContinuity }
     }
 
     func setEngineInputDevice(_ deviceID: AudioDeviceID, on audioUnit: AudioUnit) throws {
