@@ -33,7 +33,7 @@ final class AudioCaptureService: AudioCaptureStarting {
         isPrepared = true
     }
 
-    func startCapture() {
+    func startCapture() throws {
         prepareEngine()
         guard let engine, !isTapInstalled else { return }
 
