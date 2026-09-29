@@ -7,13 +7,19 @@ final class AudioCaptureService: AudioCaptureStarting {
     private var ringBuffer = AudioRingBuffer(capacitySamples: 16_000 * 120)
     private var isTapInstalled = false
     private var isPrepared = false
+    private let deviceManager: AudioInputDeviceManager
 
     var onSamples: (([Float]) -> Void)?
     private(set) var lastLevel: Double = 0
+    private(set) var activeInputUID: String?
 
     private let targetSampleRate: Double = 16_000
 
-    init(prepareImmediately: Bool = true) {
+    init(
+        prepareImmediately: Bool = true,
+        deviceManager: AudioInputDeviceManager = AudioInputDeviceManager()
+    ) {
+        self.deviceManager = deviceManager
         if prepareImmediately {
             prepareEngine()
         }
@@ -33,13 +39,28 @@ final class AudioCaptureService: AudioCaptureStarting {
         isPrepared = true
     }
 
+    func resolveAndBindInput(audioUnit: AudioUnit?) throws -> AudioInputDevice {
+        guard let device = deviceManager.resolveCaptureDevice() else {
+            throw AudioCaptureStartError.noInputDevice
+        }
+        if let audioUnit {
+            try deviceManager.setEngineInputDevice(device.id, on: audioUnit)
+        }
+        activeInputUID = device.uid
+        return device
+    }
+
     func startCapture() throws {
         prepareEngine()
         guard let engine, !isTapInstalled else { return }
 
+        _ = try resolveAndBindInput(audioUnit: engine.inputNode.audioUnit)
+
         let input = engine.inputNode
         let inputFormat = input.inputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { return }
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw AudioCaptureStartError.noInputDevice
+        }
 
         guard let outputFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -47,9 +68,11 @@ final class AudioCaptureService: AudioCaptureStarting {
             channels: 1,
             interleaved: false
         ) else {
-            return
+            throw AudioCaptureStartError.noInputDevice
         }
-        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else { return }
+        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+            throw AudioCaptureStartError.noInputDevice
+        }
 
         let bufferSize: AVAudioFrameCount = 1_024
         // Tap callback runs on AVAudioEngine's realtime queue — keep it off the MainActor.
@@ -74,6 +97,7 @@ final class AudioCaptureService: AudioCaptureStarting {
         } catch {
             input.removeTap(onBus: 0)
             isTapInstalled = false
+            throw AudioCaptureStartError.noInputDevice
         }
     }
 
