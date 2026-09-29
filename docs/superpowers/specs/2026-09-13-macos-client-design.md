@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-13
 **Amended:** 2026-09-14 — this client is one implementation of the shared API (`platform: macos`). Pill is Connecting until mic frames and server `ready`, then Listening.
+**Amended:** 2026-09-28 — Continuity microphone fallback when no usable local input; see `2026-09-28-continuity-microphone-fallback-design.md`.
 **Status:** Design approved, pending spec review
 **Depends on:** `2026-09-13-dictation-protocol.md`
 
@@ -23,7 +24,8 @@ siblings directly. This is what makes each piece testable in isolation.
 |---|---|
 | `SessionCoordinator` | Owns the state machine. The only component that knows the overall flow |
 | `HotkeyService` | Registers the global shortcut, emits a toggle event |
-| `AudioCaptureService` | Owns `AVAudioEngine`, taps input, converts to 16 kHz mono float |
+| `AudioCaptureService` | Owns `AVAudioEngine`, taps input, converts to 16 kHz mono float; binds a resolved CoreAudio input before capture |
+| `AudioInputDeviceManager` | Enumerates CoreAudio inputs; selects default or Continuity/external fallback when default is unusable |
 | `SilenceDetector` | Consumes audio frames, reports speech/silence transitions |
 | `OpusEncoder` | Converts float frames to an Ogg Opus byte stream |
 | `TranscriptionEngine` (protocol) | Streaming session lifecycle, see below |
@@ -61,9 +63,18 @@ waits exist to prevent.
 
 Three things happen concurrently. None of them is “listening” yet.
 
-1. The audio tap starts. `AVAudioEngine` is prepared once at app launch and kept
-   ready, so starting a capture costs milliseconds rather than tens. Encoded
-   bytes go into a local buffer; they are not sent yet.
+1. The audio tap starts. Before installing the tap, `AudioCaptureService`
+   resolves a usable input via `AudioInputDeviceManager`: keep the system
+   default when it has input channels; otherwise prefer Continuity Camera
+   (iPhone, transport `'ccwd'`), then any other non-built-in mic. Binding is
+   app-local on the engine’s input AudioUnit — the system Sound default is
+   not changed. Details:
+   `2026-09-28-continuity-microphone-fallback-design.md`.
+   `AVAudioEngine` is prepared once at app launch and kept ready, so starting
+   a capture costs milliseconds rather than tens when a device is available.
+   If no usable device exists, fail immediately with `no_input_device` rather
+   than silent no-op. Encoded bytes go into a local buffer; they are not sent
+   yet.
 2. The pill appears in **Connecting**.
 3. The WebSocket is opened and `start` is sent, unless a warm connection from a
    recent dictation is still alive.
@@ -209,7 +220,9 @@ one token refresh and reconnect attempt before surfacing a login prompt.
 ## Testing
 
 Unit tests cover the ring buffer, `SilenceDetector` against synthesised noisy
-and quiet audio, encoder framing, the Connecting → Recording gate (no listening
+and quiet audio, encoder framing, `AudioInputDeviceManager` selection policy
+(usable default kept; Continuity preferred only when default is unusable;
+`nil` when nothing usable), the Connecting → Recording gate (no listening
 UI before frames + `ready`; flush of the pre-`ready` buffer), and — importantly
 — every timeout path in the state machine, since those are the behaviours that
 prevent hangs and the ones least likely to be exercised by hand.
@@ -228,4 +241,6 @@ and without a clipboard manager running.
 ## Deferred
 
 Code signing, notarization, auto-update, App Store distribution, languages
-beyond English, custom vocabulary, and any post-processing of transcripts.
+beyond English, custom vocabulary, any post-processing of transcripts, and a
+Settings microphone picker / ranked device list (Continuity fallback in
+`2026-09-28-continuity-microphone-fallback-design.md` is automatic only).
