@@ -326,6 +326,26 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastError?.retryable, true)
     }
 
+    func testStartCaptureFailureReturnsNoInputDevice() {
+        let capture = FakeAudioCapture()
+        capture.startError = AudioCaptureStartError.noInputDevice
+        let coordinator = SessionCoordinator(
+            engine: FakeTranscriptionEngine(),
+            inserter: FakeInserter(),
+            clock: Clock(),
+            audioCapture: capture
+        )
+        coordinator.hotkeyPressed()
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertEqual(coordinator.lastError?.code, "no_input_device")
+        XCTAssertEqual(
+            coordinator.lastError?.message,
+            "No microphone available. Connect a mic or use Continuity Camera with your iPhone."
+        )
+        XCTAssertEqual(coordinator.lastError?.retryable, true)
+        XCTAssertFalse(capture.isCapturing)
+    }
+
     private func makeConnecting(engine: FakeTranscriptionEngine) -> SessionCoordinator {
         let coordinator = SessionCoordinator(engine: engine, inserter: FakeInserter(), clock: Clock())
         coordinator.hotkeyPressed()

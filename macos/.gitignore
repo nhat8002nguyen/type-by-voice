@@ -4,3 +4,4 @@ DerivedData/
 .DS_Store
 Vendor/.build
 Vendor/.swiftpm
+buildServer.json
