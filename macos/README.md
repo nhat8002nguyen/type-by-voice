@@ -61,8 +61,23 @@ Uploads go to the **public** repo [`type-by-voice-releases`](https://github.com/
 ```bash
 ./macos/Scripts/package-dmg.sh
 ./macos/Scripts/publish-dmg-release.sh
+# Release tag [macos-v1.0.1+1] (Enter to accept):
 # prints https://github.com/nhat8002nguyen/type-by-voice-releases/releases/download/macos-v…/TypeByVoice-….dmg
 ```
+
+`publish-dmg-release.sh` always prompts on stdin for the release tag:
+
+- **Enter / blank** → publishes the suggested tag. It is the DMG's own
+  `<version>+<build>` when that tag is free and newest, otherwise the patch after
+  the highest tag already on the release repo (`macos-v1.0.0+1` taken → `macos-v1.0.1+1`).
+- **Typed value** → used as-is, with or without the `macos-v` prefix
+  (`1.0.5` → `macos-v1.0.5`). A tag that already exists locally fails before anything is uploaded.
+
+The uploaded asset is renamed to the chosen tag, so the tag, file name, and URL stay
+consistent. If the chosen tag differs from the DMG's built version, the script warns
+you to bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` and re-run `package-dmg.sh`.
+It exits with an error when stdin is closed (no TTY), so pipe a tag or empty line if you
+ever script it.
 
 Override destination with `TBV_RELEASE_REPO=owner/name` if needed.
 

@@ -1,5 +1,6 @@
 xcuserdata/
-DerivedData/
+# Xcode build output (build-and-run.sh / package-dmg.sh pass -derivedDataPath).
+DerivedData*/
 *.xcuserstate
 .DS_Store
 Vendor/.build
