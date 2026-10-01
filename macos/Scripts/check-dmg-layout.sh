@@ -40,9 +40,13 @@ EXPECTED_BG_W=540
 EXPECTED_BG_H=400
 EXPECTED_BG_W2X=1080
 EXPECTED_BG_H2X=800
-# The window frame dmg-layout.applescript sets. One of the four original
-# complaints was that the window was too large, so it is asserted too.
-EXPECTED_WINDOW="${EXPECTED_BG_W}x${EXPECTED_BG_H}"
+# The window frame dmg-layout.applescript sets: the backdrop canvas plus the
+# Finder title bar, so the *content* view is exactly the canvas. One of the four
+# original complaints was that the window was too large, so it is asserted.
+# (The title bar measured 22pt on the machine this was built on; if a future
+# macOS changes it the artwork shifts by the difference, which is a few points.)
+EXPECTED_TITLE_BAR=22
+EXPECTED_WINDOW="${EXPECTED_BG_W}x$((EXPECTED_BG_H + EXPECTED_TITLE_BAR))"
 # Finder's item `position` is the item's centre, and dmg-layout.applescript puts
 # both icons on the arrow's centre line, symmetric about the window's centre.
 # Positions can come back snapped to Finder's icon grid, so compare with a

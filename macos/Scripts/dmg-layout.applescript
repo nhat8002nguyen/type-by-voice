@@ -25,22 +25,26 @@ on run argv
 
 	-- Geometry. Finder's item `position` is the item's CENTRE, not its frame's
 	-- top-left corner: asking for {116, 148} puts the icon's centre there (seen
-	-- on a real build), and y is measured from the top of the content view. So
-	-- the icons are placed on the backdrop arrow's centre line and spaced
-	-- symmetrically about the window's centre — otherwise the pair sits off to
-	-- one side and the arrow, which is pinned to the canvas centre, ends up
-	-- overlapping the Applications icon.
-	set windowWidth to 540
-	set windowHeight to 400
-	set windowBounds to {400, 100, 400 + windowWidth, 100 + windowHeight}
+	-- on a real build), and y is measured from the top of the content view.
+	--
+	-- The backdrop canvas is contentWidth x contentHeight, and Finder draws a
+	-- picture that is taller than the content view clipped from the top. So the
+	-- frame has to leave exactly the canvas's height of *content*, or the arrow
+	-- lands a title bar's height above the icons: measured on a real build, the
+	-- frame was 400 with a 22pt title bar, the content came out ~378, and the
+	-- arrow sat 22.2pt above the icons' centres.
+	set contentWidth to 540
+	set contentHeight to 400
+	set titleBarHeight to 22
+	set windowBounds to {400, 100, 400 + contentWidth, 100 + contentHeight + titleBarHeight}
+	set windowCentreX to contentWidth / 2
 	set iconSize to 128
 	set textSize to 14
 	-- The arrow in macos/Installer/dmg-background.png is centred at
-	-- windowWidth / 2 and y = 212 (see make-dmg-background.swift).
+	-- contentWidth / 2 and y = 212 (see make-dmg-background.swift).
 	set iconCentreY to 212
-	-- Per side: 64 (half an icon) + 36 (half the 72pt arrow) + 8 clearance.
-	set iconOffsetX to 108
-	set windowCentreX to windowWidth / 2
+	-- Per side: 64 (half an icon) + 36 (half the 72pt arrow) + 24 clearance.
+	set iconOffsetX to 124
 	set appPosition to {windowCentreX - iconOffsetX, iconCentreY}
 	set folderPosition to {windowCentreX + iconOffsetX, iconCentreY}
 
