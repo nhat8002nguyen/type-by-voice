@@ -55,14 +55,22 @@ EXPECTED_ICON_Y=212
 POSITION_TOLERANCE=8
 
 STRUCTURAL_ONLY=0
-if [[ "${1:-}" == "--structural-only" ]]; then
-  STRUCTURAL_ONLY=1
-  shift
-fi
+MOUNT_AT=""
+usage() {
+  echo "usage: check-dmg-layout.sh [--structural-only] [--mount-point DIR] <path-to-dmg>" >&2
+}
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --structural-only) STRUCTURAL_ONLY=1; shift ;;
+    --mount-point) MOUNT_AT="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) break ;;
+  esac
+done
 
 DMG="${1:-}"
 if [[ -z "$DMG" || ! -f "$DMG" ]]; then
-  echo "usage: check-dmg-layout.sh [--structural-only] <path-to-dmg>" >&2
+  usage
   exit 2
 fi
 
@@ -70,12 +78,17 @@ failures=0
 pass() { echo "PASS: $1" }
 fail() { echo "FAIL: $1"; failures=$((failures + 1)) }
 
-for stale in /Volumes/$VOLUME_NAME*(N); do
-  echo "==> Detaching $stale"
-  hdiutil detach "$stale" >/dev/null 2>&1 || rmdir "$stale" 2>/dev/null || true
-done
+MNT="${MOUNT_AT:-$MOUNT_POINT}"
+# Only the canonical mountpoint lets the read-back address the volume by name
+# unambiguously, so only then do we clear the other volumes of that name (and
+# only then would it be right to touch volumes we did not mount).
+if [[ "$MNT" == "$MOUNT_POINT" ]]; then
+  for stale in /Volumes/$VOLUME_NAME*(N); do
+    echo "==> Detaching $stale"
+    hdiutil detach "$stale" >/dev/null 2>&1 || rmdir "$stale" 2>/dev/null || true
+  done
+fi
 
-MNT="$MOUNT_POINT"
 if ! hdiutil attach "$DMG" -nobrowse -noautoopen -readonly -mountpoint "$MNT" >/dev/null 2>&1; then
   echo "error: could not mount $DMG at $MNT" >&2
   exit 2
@@ -146,6 +159,9 @@ done
 
 if [[ $STRUCTURAL_ONLY -eq 1 ]]; then
   echo "==> Skipping the Finder read-back (--structural-only)"
+elif [[ "$MNT" != "$MOUNT_POINT" ]]; then
+  echo "==> Skipping the Finder read-back (mounted at $MNT, not $MOUNT_POINT,"
+  echo "    so the volume cannot be addressed by name unambiguously)"
 else
   READBACK="$(osascript -e '
 on run a

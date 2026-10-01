@@ -78,6 +78,8 @@ Verify a built DMG, and re-tune the window (icon size and positions in
 ```bash
 ./macos/Scripts/check-dmg-layout.sh macos/dist/TypeByVoice-<version>+<build>.dmg
 # --structural-only skips the assertions that need Finder automation
+# --mount-point DIR mounts elsewhere when /Volumes is not writable (CI or a
+#   sandboxed shell), which also means the Finder read-back is skipped
 ```
 
 ### Publish public download link
