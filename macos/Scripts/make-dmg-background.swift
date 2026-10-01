@@ -11,10 +11,8 @@
 //  correctly in both Light and Dark Mode, where a fixed light or dark panel
 //  would clash with one of them.
 //
-//  The arrow sits at the centre of the icon row. The icons' vertical centres
-//  land on the same y (see `icon size` and the item positions in
-//  dmg-layout.applescript: position + iconSize / 2 = 212), so the arrow lines
-//  up with them without any per-icon tuning.
+//  The arrow sits on the icons' centre line: `arrowCentre` below is in image
+//  coordinates and must equal `iconCentreY` in macos/Scripts/dmg-layout.applescript.
 //
 //  `panelAlpha` exists as the escape hatch for the one thing a transparent
 //  backdrop cannot control: Finder picks the icon-label colour from the
@@ -36,9 +34,15 @@ import UniformTypeIdentifiers
 // MARK: - Configuration
 
 /// Point size of the 1x canvas; the @2x file is double this in both axes.
+///
+/// The canvas is the *content view* of the installer window: Finder draws the
+/// background picture from the content view's top-left. `dmg-layout.applescript`
+/// sizes the window frame so the content is exactly this.
 private let canvasSize = CGSize(width: 540, height: 400)
 
-/// Centre of the arrow in 1x coordinates, and its overall size.
+/// Centre of the arrow, in *image* coordinates: x from the left, y downward from
+/// the top of the canvas. This is the same line the icons sit on, so it must
+/// equal `iconCentreY` in macos/Scripts/dmg-layout.applescript.
 private let arrowCentre = CGPoint(x: 270, y: 212)
 private let arrowSize = CGSize(width: 72, height: 52)
 
@@ -77,7 +81,15 @@ private let outputDirectory = scriptDirectory
 
 // MARK: - Drawing
 
-/// Builds the arrow outline in its own coordinate box, without placement.
+/// CoreGraphics draws with y increasing *upward*, while everything in this file
+/// and in dmg-layout.applescript is expressed downward from the top. Flipping in
+/// one place is what keeps `arrowCentre` meaning what it says.
+///
+/// Getting this wrong is what put the arrow 24pt above the icons: the drawing
+/// code took an image-space y as a CoreGraphics one, so `212` rendered at image
+/// y 188. One flipped coordinate, invisible in the artwork itself, and the
+/// reason the arrow stayed high through every window-size change.
+private func cgY(_ imageY: CGFloat) -> CGFloat { canvasSize.height - imageY }
 private func makeArrowPath() -> CGPath {
     let path = CGMutablePath()
     path.addRect(shaftRect)
@@ -126,9 +138,10 @@ private func makeImage(scale: Int) -> CGImage {
     )
     context.setFillColor(arrowFill)
 
-    // The path is 72x52 like arrowSize, so its centre sits at half its size.
+    // The path is 72x52 like arrowSize, so its centre sits at half its size;
+    // cgY flips the image-space centre into CoreGraphics' upward y.
     let dx = arrowCentre.x - arrowSize.width / 2
-    let dy = arrowCentre.y - arrowSize.height / 2
+    let dy = cgY(arrowCentre.y) - arrowSize.height / 2
     var placement = CGAffineTransform(translationX: dx, y: dy)
     context.addPath(makeArrowPath().copy(using: &placement)!)
     context.fillPath()
