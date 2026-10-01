@@ -43,6 +43,12 @@ EXPECTED_BG_H2X=800
 # The window frame dmg-layout.applescript sets. One of the four original
 # complaints was that the window was too large, so it is asserted too.
 EXPECTED_WINDOW="${EXPECTED_BG_W}x${EXPECTED_BG_H}"
+# Finder's item `position` is the item's centre, and dmg-layout.applescript puts
+# both icons on the arrow's centre line, symmetric about the window's centre.
+# Positions can come back snapped to Finder's icon grid, so compare with a
+# tolerance: 8pt still catches the 50-64pt errors this guards against.
+EXPECTED_ICON_Y=212
+POSITION_TOLERANCE=8
 
 STRUCTURAL_ONLY=0
 if [[ "${1:-}" == "--structural-only" ]]; then
@@ -164,7 +170,9 @@ end run' "$VOLUME_NAME" 2>&1)"
   else
     IFS='|' read -r icon_size arrangement bg_missing p1 p2 win_size <<<"$READBACK"
     app_x="${${p1%%,*}//[^0-9-]/}"
+    app_y="${${p1##*,}//[^0-9-]/}"
     folder_x="${${p2%%,*}//[^0-9-]/}"
+    folder_y="${${p2##*,}//[^0-9-]/}"
 
     if [[ "$icon_size" == "$EXPECTED_ICON_SIZE" ]]; then
       pass "icon size is $EXPECTED_ICON_SIZE"
@@ -177,6 +185,34 @@ end run' "$VOLUME_NAME" 2>&1)"
     else
       fail "window is $win_size, expected $EXPECTED_WINDOW (both numbers are points)"
     fi
+
+    # Balanced about the window's centre, and both on the arrow's line. "The app
+    # is left of Applications" alone passes on a pair that sits 50pt off to one
+    # side with the arrow overlapping the folder, which is what the first
+    # shipped attempt did.
+    if [[ -n "$app_x" && -n "$folder_x" && "$win_size" == *x* ]]; then
+      midpoint=$(( (app_x + folder_x) / 2 ))
+      centre=$(( ${win_size%%x*} / 2 ))
+      delta=$(( midpoint - centre ))
+      (( delta < 0 )) && delta=$(( -delta ))
+      if (( delta <= POSITION_TOLERANCE )); then
+        pass "icon pair is balanced about the window centre (midpoint $midpoint vs centre $centre)"
+      else
+        fail "icon pair is off-centre: midpoint $midpoint vs window centre $centre (${delta}pt out) — the arrow lands asymmetrically between the icons"
+      fi
+    fi
+
+    for entry in "app:$app_y" "Applications:$folder_y"; do
+      icon_y="${entry##*:}"
+      [[ -n "$icon_y" ]] || continue
+      dy=$(( icon_y - EXPECTED_ICON_Y ))
+      (( dy < 0 )) && dy=$(( -dy ))
+      if (( dy <= POSITION_TOLERANCE )); then
+        pass "${entry%%:*} icon sits on the arrow's line (y $icon_y)"
+      else
+        fail "${entry%%:*} icon is at y $icon_y, expected $EXPECTED_ICON_Y — it floats off the arrow's line"
+      fi
+    done
 
     if [[ "$arrangement" == "not arranged" ]]; then
       pass "auto-arrange is off, so the recorded icon positions hold"
