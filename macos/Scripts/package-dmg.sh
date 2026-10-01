@@ -96,12 +96,14 @@ trap 'hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true; rm -rf "$TIF
 # the 1x PNG.
 tiffutil -cathidpicheck "$BG_BASE.png" "$BG_BASE@2x.png" -out "$TIFF_DIR/dmg-background.tiff" >/dev/null
 
-# dmg-layout.applescript addresses the volume by name, so a stale mount of the
-# same name would take the layout instead of the image we just built. (Three
-# such mounts were sitting in /Volumes on the machine this was written on.)
-while [[ -d "$MOUNT_POINT" ]]; do
-  echo "==> Detaching stale mount at $MOUNT_POINT"
-  hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1 || { rmdir "$MOUNT_POINT" 2>/dev/null || break; }
+# dmg-layout.applescript addresses the volume by name, so EVERY volume named
+# TypeByVoice has to be gone before we mount ours: a stale one is a read-only
+# mount of an older DMG, so the layout would fail on it or land on the wrong
+# volume. (Three of them were sitting in /Volumes on the machine this was
+# written on, and matching the exact path alone covered only one.)
+for stale in /Volumes/$VOLUME_NAME*(N); do
+  echo "==> Detaching stale mount at $stale"
+  hdiutil detach "$stale" >/dev/null 2>&1 || rmdir "$stale" 2>/dev/null || true
 done
 
 rm -f "$RW_DMG" "$DMG_PATH"

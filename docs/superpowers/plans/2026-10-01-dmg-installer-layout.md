@@ -117,18 +117,28 @@ Write the check first and watch it fail on today's artifact — that failure *is
 `#!/bin/zsh` + `set -uo pipefail` (do **not** use `set -e`: the script must run every assertion and report all failures). Mount read-only into a fresh temp dir and always detach:
 
 ```zsh
-MNT="$(mktemp -d "${TMPDIR:-/tmp}/tbv-dmg-check.XXXXXX")"
+# (superseded by the fix pass — see the note below the snippet)
+for stale in /Volumes/$VOLUME_NAME*(N); do
+  hdiutil detach "$stale" >/dev/null 2>&1 || rmdir "$stale" 2>/dev/null || true
+done
+MNT="/Volumes/$VOLUME_NAME"
 hdiutil attach "$DMG" -nobrowse -noautoopen -readonly -mountpoint "$MNT" >/dev/null
 trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true; rmdir "$MNT" 2>/dev/null || true' EXIT
 ```
 
-Address everything through `$MNT`, never `/Volumes/TypeByVoice` — the volume name gets suffixed (`TypeByVoice 1`, `TypeByVoice 2`) whenever a same-named volume is already mounted.
+Address everything through `$MNT`. **Mount at `/Volumes/TypeByVoice` and detach every
+same-named volume first**, because the read-back in step 1 addresses the volume *by
+name* (Finder has no reliable mountpoint-based disk reference). With two volumes named
+`TypeByVoice` mounted — the kernel suffixes the mount path `TypeByVoice 1`,
+`TypeByVoice 2` — Finder can resolve `disk "TypeByVoice"` to the wrong one, and the
+gate would pass or fail against an older DMG. Measured on the machine this was written
+on: three such volumes were mounted, and matching the exact path alone covered one.
 
 Structural assertions (run always):
 
 1. `$MNT/TypeByVoice.app` is a directory and `$MNT/Applications` is a symlink resolving to `/Applications`.
 2. `$MNT/.DS_Store` exists and is larger than 0 bytes.
-3. `$MNT/.background/dmg-background.tiff` exists and `tiffutil -info` reports exactly two images at 540×400 and 1080×800 — this is the Retina guard (Review Focus 2).
+3. `$MNT/.background/dmg-background.tiff` exists and `tiffutil -info` reports exactly two images at 540×400 and 1080×800 — this is the Retina guard (Review Focus 2). If the TIFF is absent, accept `.background/dmg-background.png` at 540×400 instead: that is the fallback Task 4 Step 5 documents, and the gate must not fail a DMG produced by following the plan. (Filter `sips`'s output to its own `pixelWidth:`/`pixelHeight:` lines before extracting digits — it prints the file path first, and the path contains digits.)
 4. The baked endpoints survived: `plutil -extract TBV_API_URL raw "$MNT/TypeByVoice.app/Contents/Info.plist"` and the same for `TBV_DICTATE_URL` both print a non-empty value.
 
 Semantic assertions (skipped when `--structural-only` is passed), by reading the layout back out of a *fresh* mount:
@@ -139,12 +149,16 @@ READBACK="$(osascript -e 'on run a
     set v to icon view options of container window
     set p1 to position of item "TypeByVoice.app" of container window
     set p2 to position of item "Applications" of container window
-    return ((icon size of v) as text) & "|" & ((arrangement of v) as text) & "|" & ((background picture of v) is missing value) & "|" & ((item 1 of p1) as text) & "," & ((item 2 of p1) as text) & "|" & ((item 1 of p2) as text) & "," & ((item 2 of p2) as text)
+    set b to bounds of container window
+    return ((icon size of v) as text) & "|" & ((arrangement of v) as text) & "|" & (((background picture of v) is missing value) as text) & "|" & ((item 1 of p1) as text) & "," & ((item 2 of p1) as text) & "|" & ((item 1 of p2) as text) & "," & ((item 2 of p2) as text) & "|" & (((item 3 of b) - (item 1 of b)) as text) & "x" & (((item 4 of b) - (item 2 of b)) as text)
   end tell
 end run' "TypeByVoice")"
 ```
 
-Assert on that string: `icon size` is `128`, `arrangement` is `not arranged`, `background picture … is missing value` is `false`, and `p1`'s x < `p2`'s x — the app left of Applications, which is the exact complaint (Review Focus 5). Print a clear `FAIL: app icon is not left of Applications (got …)` when it inverts.
+Open the window before reading it — `container window` of a disk Finder has never opened is
+`missing value` — which is why this tier briefly shows the volume's Finder window.
+
+Assert on that string: `icon size` is `128`, `arrangement` is `not arranged`, `background picture … is missing value` is `false`, the window is `540x400` (one of the four original complaints was that the window was too large, so it is asserted too), and `p1`'s x < `p2`'s x — the app left of Applications, which is the exact complaint (Review Focus 5). Print a clear `FAIL: app icon is not left of Applications (got …)` when it inverts.
 
 Exits non-zero at the end if anything failed, summarising `n assertion(s) failed`.
 
