@@ -169,7 +169,7 @@ git commit -m "test(macos): assert the DMG carries a drag-to-install layout"
 
 **Interfaces:**
 - Consumes: `argv` — exactly one item, the mounted volume's name (`TypeByVoice`).
-- Produces: the volume's `.DS_Store` view settings, and exit status 0. Non-zero with a Finder error when Automation is denied (`-10004`) or the volume is absent; exit 2 with a usage line when `argv` is empty. Task 4 calls it and reports the outcome.
+- Produces: the volume's `.DS_Store` view settings, and exit status 0. Non-zero (with a usage line for the empty-argv case, or a Finder error for a denied `-10004` / absent volume) otherwise. Task 4 calls it and reports the outcome.
 
 - [ ] **Step 1: Write `macos/Scripts/dmg-layout.applescript`**
 
@@ -198,7 +198,7 @@ Expected: `compiled` — catches AppleScript syntax errors without needing Finde
 - [ ] **Step 3: Verify the argv guard, and watch the permission failure it cannot hide**
 
 Run: `osascript macos/Scripts/dmg-layout.applescript`
-Expected: exit 2 and the usage error.
+Expected: the usage error and a non-zero status. `osascript` reports **1**, even though the script raises `error … number 2` (measured) — treat "non-zero" as the contract; no caller branches on the exact code.
 
 Then, from the same shell, run it with a volume name that does not exist: `osascript macos/Scripts/dmg-layout.applescript NoSuchVolumeTBV`
 Expected: non-zero. In a normal Terminal the first such run triggers the macOS prompt *"… wants access to control Finder"* — allow it. In a sandboxed or agent-run shell it fails with `-10004` instead (verified on this machine). Either way it must not report success; note which one you saw, because Task 4 turns the `-10004` case into an explicit message.
