@@ -1,0 +1,6 @@
+#!/bin/sh
+# AppRun: the entry point AppImage executes. Runs the client with the desktop
+# environment it was packaged for.
+set -e
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "${HERE}/usr/bin/typebyvoice" "$@"

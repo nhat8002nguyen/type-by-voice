@@ -1,0 +1,11 @@
+Package: typebyvoice
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: libgtk-4-1, libayatana-appindicator3-1, libopus0, libpulse0
+Maintainer: Type by Voice <support@typebyvoice.example>
+Description: Dictate into any application
+ Type by Voice records from the microphone, streams the audio to the shared
+ backend for transcription, and inserts the text at the cursor. A single-instance
+ tray agent with a global shortcut and a floating status pill.

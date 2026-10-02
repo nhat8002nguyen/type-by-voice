@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Type by Voice
+Comment=Dictate into any application
+Exec=typebyvoice
+Icon=typebyvoice
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=dictation;voice;speech;transcription;
+StartupNotify=false
