@@ -1,4 +1,4 @@
-export const PLATFORMS = ['macos', 'windows', 'ios', 'android'] as const;
+export const PLATFORMS = ['macos', 'windows', 'ios', 'android', 'linux'] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
 export const ERROR_CODES = {

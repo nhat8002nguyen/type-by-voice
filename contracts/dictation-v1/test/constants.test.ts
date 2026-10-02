@@ -7,8 +7,8 @@ import {
 } from '../src/constants.js';
 
 describe('dictation v1 constants', () => {
-  it('lists the four official platforms', () => {
-    expect([...PLATFORMS]).toEqual(['macos', 'windows', 'ios', 'android']);
+  it('lists the official platforms', () => {
+    expect([...PLATFORMS]).toEqual(['macos', 'windows', 'ios', 'android', 'linux']);
   });
 
   it('marks quota_exceeded non-retryable and provider_unavailable retryable', () => {

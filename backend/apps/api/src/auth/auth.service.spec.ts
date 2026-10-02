@@ -172,7 +172,7 @@ describe('AuthService.register', () => {
         email: 'a@b.co',
         password: 'correct horse battery staple',
         ...identity,
-        platform: 'linux' as never,
+        platform: 'beos' as never,
       }),
     ).rejects.toMatchObject({
       status: 400,
@@ -269,7 +269,7 @@ describe('AuthService.login', () => {
       service.login({
         ...credentials,
         ...identity,
-        platform: 'linux' as never,
+        platform: 'beos' as never,
       }),
     ).rejects.toMatchObject({
       status: 400,

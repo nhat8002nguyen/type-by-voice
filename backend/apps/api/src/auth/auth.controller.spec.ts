@@ -52,7 +52,7 @@ describe('Auth HTTP identity', () => {
     await createApp();
     const response = await request(app.getHttpServer())
       .post('/v1/auth/register')
-      .send({ ...validBody, platform: 'linux' });
+      .send({ ...validBody, platform: 'beos' });
 
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ code: 'invalid_request' });
@@ -75,7 +75,7 @@ describe('Auth HTTP identity', () => {
       .send({
         ...validBody,
         refreshToken: 'unused',
-        platform: 'linux',
+        platform: 'beos',
       });
 
     expect(response.status).toBe(400);

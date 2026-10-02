@@ -12,6 +12,15 @@ describe('validateStart', () => {
     }
   });
 
+  it('accepts platform linux', () => {
+    const start = { ...loadFixture<StartMessage>('start.valid.json'), platform: 'linux' };
+    const result = validateStart(start);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.platform).toBe('linux');
+    }
+  });
+
   it('rejects unknown platform, bad codec, and missing deviceId', () => {
     expect(validateStart(loadFixture('start.unknown-platform.json')).ok).toBe(false);
     expect(validateStart(loadFixture('start.bad-codec.json')).ok).toBe(false);
