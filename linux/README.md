@@ -61,6 +61,26 @@ CGO_ENABLED=1 go test ./app/...
 CGO_ENABLED=1 go build -trimpath -o typebyvoice ./cmd/typebyvoice
 ```
 
+### Troubleshooting
+
+- **`Package 'opusfile'` / `Package 'gobject-introspection-1.0' was not found`** — the
+  `-dev` packages from step 2 are missing. They are needed to *compile* the cgo
+  layer, not just to run it. Re-run step 2, then retry.
+- **`/usr/local/go/pkg/tool/linux_*/compile: signal: killed`** — the kernel
+  OOM-killed the Go compiler while building gotk4's generated GTK package, which
+  is very large. Give the VM more memory (**UTM → Settings → System → Memory: 8 GB**)
+  and/or add swap, and lower compile parallelism:
+
+  ```bash
+  sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile \
+    && sudo mkswap /swapfile && sudo swapon /swapfile
+  GOFLAGS=-p=1 GOMAXPROCS=2 CGO_ENABLED=1 go test ./app/...
+  GOFLAGS=-p=1 CGO_ENABLED=1 go build -o typebyvoice ./cmd/typebyvoice
+  ```
+
+  The first cgo build of the GTK bindings takes several minutes and the most
+  memory; later builds reuse the cache.
+
 ### 4. Point it at a backend and run
 
 The client picks endpoints from the environment, falling back to localhost:
