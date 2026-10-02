@@ -82,8 +82,10 @@ jobs:
           APPDIR="$PWD/build/AppDir"
           rm -rf "$APPDIR"
           mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" \
-                   "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+                   "$APPDIR/usr/share/icons/hicolor/scalable/apps"
           cp build/typebyvoice "$APPDIR/usr/bin/typebyvoice"
+          cp packaging/appimage/typebyvoice.svg "$APPDIR/typebyvoice.svg"
+          cp packaging/appimage/typebyvoice.svg "$APPDIR/usr/share/icons/hicolor/scalable/apps/"
           cp packaging/appimage/typebyvoice.desktop "$APPDIR/typebyvoice.desktop"
           cp packaging/appimage/typebyvoice.desktop "$APPDIR/usr/share/applications/"
           cp packaging/appimage/AppRun "$APPDIR/AppRun"
@@ -100,8 +102,10 @@ jobs:
           set -euo pipefail
           PKG="$PWD/build/pkg"
           rm -rf "$PKG"
-          mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/share/applications"
+          mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/share/applications" \
+                   "$PKG/usr/share/icons/hicolor/scalable/apps"
           cp build/typebyvoice "$PKG/usr/bin/typebyvoice"
+          cp packaging/appimage/typebyvoice.svg "$PKG/usr/share/icons/hicolor/scalable/apps/"
           cp packaging/appimage/typebyvoice.desktop "$PKG/usr/share/applications/"
           sed "s/@VERSION@/${APP_VERSION}/" packaging/debian/control > "$PKG/DEBIAN/control"
           cp packaging/debian/postinst "$PKG/DEBIAN/postinst"
