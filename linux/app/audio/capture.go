@@ -71,7 +71,7 @@ func (c *capture) Start(context.Context) error {
 	cfg := malgo.DefaultDeviceConfig(malgo.Capture)
 	cfg.Capture.Format = malgo.FormatS16
 	cfg.Capture.Channels = 1
-	cfg.Capture.SampleRate = captureSampleRate
+	cfg.SampleRate = captureSampleRate
 	if c.deviceName != "" {
 		if dev, err := c.findDevice(c.deviceName); err == nil {
 			cfg.Capture.DeviceID = unsafe.Pointer(&dev.ID[0])

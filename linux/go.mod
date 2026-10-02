@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/diamondburned/gotk4/pkg v0.4.1
+	github.com/diamondburned/gotk4/pkg v0.3.1
 	github.com/gen2brain/malgo v0.11.26
 	github.com/jezek/xgb v1.3.1
 	github.com/zalando/go-keyring v0.2.8
@@ -13,9 +13,11 @@ require (
 )
 
 require (
+	github.com/KarpelesLab/weak v0.1.1 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	golang.design/x/x11 v0.2.0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
 	golang.org/x/image v0.28.0 // indirect
