@@ -109,6 +109,12 @@ func main() {
 	// initialised, which happens when the application starts. Creating any of
 	// them before app.Run() segfaults inside gtk_label_new.
 	app.ConnectStartup(func() {
+		// Hold the application open. Without this, GtkApplication quits as soon
+		// as it has no windows — and the pill is a plain GtkWindow, not an
+		// ApplicationWindow — so a run that shows no onboarding window would
+		// exit immediately (the tray icon appears for an instant, then goes).
+		app.Hold()
+
 		pill := overlay.NewPill(app, func() { _ = coordinator.Toggle(context.Background()) })
 		coordinator.OnPillChanged(func(status platform.PillStatus) { pill.Show(status) })
 
