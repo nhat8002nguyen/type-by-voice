@@ -150,9 +150,12 @@ On a Wayland session (`XDG_SESSION_TYPE=wayland`) the compositor blocks global
 key grabs and synthesized keystrokes by design:
 
 - The tray/pill becomes **click-to-record** (no global shortcut).
-- Insertion uses `wtype` when it is installed
-  (`sudo apt-get install wtype`), and otherwise leaves the transcript on the
-  clipboard with a “press Ctrl+V” notification.
+- The clipboard needs `wl-clipboard` — `sudo apt-get install wl-clipboard`.
+  Without it a dictation fails with `exec: "wl-copy": executable file not found`.
+- Auto-insertion needs `wtype` (`sudo apt-get install wtype`) **and** a
+  compositor implementing the wlr virtual-keyboard protocol. GNOME's Wayland
+  does not, so on stock Ubuntu the transcript is left on the clipboard with a
+  "press Ctrl+V" notification instead.
 
 For the full macOS-like experience, log in to **Ubuntu on Xorg**.
 
