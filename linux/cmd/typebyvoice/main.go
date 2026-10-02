@@ -37,6 +37,14 @@ import (
 const version = "0.1.0+1"
 
 func main() {
+	// GTK 4 defaults to its GL renderer. On a machine with no working GL driver
+	// (a VM, a remote session) GDK fails to build a GL context and libepoxy
+	// aborts the process the moment a window is realised. Fall back to the
+	// software renderer unless the user has chosen one themselves.
+	if os.Getenv("GSK_RENDERER") == "" {
+		_ = os.Setenv("GSK_RENDERER", "cairo")
+	}
+
 	cfgDir := configDir()
 	state := stateDir()
 

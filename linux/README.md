@@ -80,6 +80,11 @@ CGO_ENABLED=1 go build -trimpath -o typebyvoice ./cmd/typebyvoice
 
   The first cgo build of the GTK bindings takes several minutes and the most
   memory; later builds reuse the cache.
+- **The app aborts with `epoxy_get_proc_address: ... Couldn't find current GLX or
+  EGL context`** — your machine has no working GL driver (common in VMs). GTK 4
+  defaults to its GL renderer and libepoxy aborts when a window is realised. The
+  client now defaults to the software renderer; to force it yourself:
+  `GSK_RENDERER=cairo ./typebyvoice` (or `LIBGL_ALWAYS_SOFTWARE=1`).
 
 ### 4. Point it at a backend and run
 
