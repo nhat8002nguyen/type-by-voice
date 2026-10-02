@@ -104,30 +104,35 @@ func main() {
 	)
 
 	app := gtk.NewApplication("com.typebyvoice.TypeByVoice", gio.ApplicationFlagsNone)
-	pill := overlay.NewPill(app, func() { _ = coordinator.Toggle(context.Background()) })
-	coordinator.OnPillChanged(func(status platform.PillStatus) { pill.Show(status) })
 
-	execPath, _ := os.Executable()
-	historyClient := history.NewClient(httpClient)
-	trayIcon, err := tray.New(tray.Actions{
-		OnRecord: func() { _ = coordinator.Toggle(context.Background()) },
-		OnSettings: func() {
-			ui.ShowSettings(app, ui.SettingsDeps{
-				Settings:  &cfg,
-				ConfigDir: cfgDir,
-				ExecPath:  execPath,
-				Devices:   appaudio.ListDevices,
-				OnSave:    func(s settings.Store) { cfg = s },
-			})
-		},
-		OnDashboard: func() {
-			ui.ShowDashboard(app, ui.DashboardDeps{History: historyClient})
-		},
-		OnQuit: func() { app.Quit() },
+	// GTK widgets and the AppIndicator must be created only after GTK is
+	// initialised, which happens when the application starts. Creating any of
+	// them before app.Run() segfaults inside gtk_label_new.
+	app.ConnectStartup(func() {
+		pill := overlay.NewPill(app, func() { _ = coordinator.Toggle(context.Background()) })
+		coordinator.OnPillChanged(func(status platform.PillStatus) { pill.Show(status) })
+
+		execPath, _ := os.Executable()
+		historyClient := history.NewClient(httpClient)
+		if _, err := tray.New(tray.Actions{
+			OnRecord: func() { _ = coordinator.Toggle(context.Background()) },
+			OnSettings: func() {
+				ui.ShowSettings(app, ui.SettingsDeps{
+					Settings:  &cfg,
+					ConfigDir: cfgDir,
+					ExecPath:  execPath,
+					Devices:   appaudio.ListDevices,
+					OnSave:    func(s settings.Store) { cfg = s },
+				})
+			},
+			OnDashboard: func() {
+				ui.ShowDashboard(app, ui.DashboardDeps{History: historyClient})
+			},
+			OnQuit: func() { app.Quit() },
+		}); err != nil {
+			log.Printf("tray: %v", err)
+		}
 	})
-	if err != nil {
-		log.Printf("tray: %v", err)
-	}
 
 	hk, hkErr := hotkey.NewHotkey(sessionKind, cfg.Hotkey)
 	if hkErr != nil {
@@ -157,9 +162,9 @@ func main() {
 				}
 			}()
 		}
-		_ = trayIcon
 		go coordinator.Run(context.Background())
 	})
+
 	app.Run(os.Args)
 }
 
