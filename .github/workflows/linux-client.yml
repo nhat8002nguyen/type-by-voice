@@ -42,7 +42,6 @@ jobs:
             pkg-config \
             libgtk-4-dev \
             libgirepository1.0-dev \
-            libayatana-appindicator3-dev \
             libpulse-dev \
             libasound2-dev \
             libopus-dev \

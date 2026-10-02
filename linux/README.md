@@ -30,7 +30,7 @@ becomes click-to-record and insertion falls back to the clipboard (see
 sudo apt-get update
 sudo apt-get install -y \
   build-essential git pkg-config curl \
-  libgtk-4-dev libgirepository1.0-dev libayatana-appindicator3-dev \
+  libgtk-4-dev libgirepository1.0-dev \
   libpulse-dev libasound2-dev libopus-dev libopusfile-dev \
   libx11-dev libxtst-dev
 ```
