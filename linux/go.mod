@@ -1,6 +1,6 @@
 module github.com/nhat8002nguyen/type-by-voice/linux
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -9,6 +9,7 @@ require (
 
 require (
 	github.com/danieljoos/wincred v1.2.3 // indirect
+	github.com/diamondburned/gotk4/pkg v0.4.1 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/gen2brain/malgo v0.11.26 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
