@@ -1,6 +1,11 @@
 import AppKit
 import SwiftUI
 
+/// How far the menu bar mark is dimmed while no dictation session is running.
+/// Deliberately quiet — the overlay pill is what says "recording" — and it
+/// replaces the old mic/mic.fill swap so only one asset has to be kept.
+private let menuBarIdleOpacity = 0.55
+
 @main
 struct TypeByVoiceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -31,10 +36,12 @@ struct TypeByVoiceApp: App {
             }
             .frame(width: 420, height: 440)
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: model.isSessionActive ? "mic.fill" : "mic")
-                Text("TBV")
-            }
+            // MenuBarIcon is a template image, so macOS inverts it for a dark
+            // menu bar. Idle is dimmed rather than swapped for a second asset,
+            // which keeps the cue in one file.
+            Image("MenuBarIcon")
+                .opacity(model.isSessionActive ? 1 : menuBarIdleOpacity)
+                .accessibilityLabel("Type by Voice")
         }
         .menuBarExtraStyle(.window)
 
