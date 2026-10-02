@@ -85,12 +85,17 @@ func stepAuth(deps OnboardingDeps, stack *gtk.Stack, win *gtk.ApplicationWindow)
 func stepMicrophone(deps OnboardingDeps, stack *gtk.Stack, win *gtk.ApplicationWindow) *gtk.Box {
 	box := gtk.NewBox(gtk.OrientationVertical, 12)
 	box.Append(gtk.NewLabel("Choose a microphone"))
-	dropdown := gtk.NewDropDownFromStrings(deviceNames(deps))
+	names := deviceNames(deps)
+	dropdown := gtk.NewDropDownFromStrings(names)
 	box.Append(dropdown)
 	next := gtk.NewButtonWithLabel("Continue")
 	next.ConnectClicked(func() {
 		cfg := *deps.Settings
-		cfg.Microphone = dropdown.SelectedString()
+		if idx := int(dropdown.Selected()); idx > 0 && idx < len(names) {
+			cfg.Microphone = names[idx]
+		} else {
+			cfg.Microphone = "" // "System default"
+		}
 		*deps.Settings = cfg
 		stack.SetVisibleChildName("hotkey")
 	})

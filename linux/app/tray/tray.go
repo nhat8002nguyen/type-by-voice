@@ -27,6 +27,7 @@ import (
 type Actions struct {
 	OnSettings  func()
 	OnDashboard func()
+	OnRecord    func()
 	OnQuit      func()
 }
 
@@ -44,9 +45,10 @@ func New(actions Actions) (*Tray, error) {
 	active = t
 	t.indicator = C.tbv_indicator_new(C.CString("audio-input-microphone"))
 	menu := C.tbv_menu_new()
+	C.tbv_menu_append(menu, C.CString("Record"), 2)
 	C.tbv_menu_append(menu, C.CString("Settings"), 0)
 	C.tbv_menu_append(menu, C.CString("Dashboard"), 1)
-	C.tbv_menu_append(menu, C.CString("Quit"), 2)
+	C.tbv_menu_append(menu, C.CString("Quit"), 3)
 	C.tbv_indicator_attach(t.indicator, menu)
 	return t, nil
 }
@@ -68,6 +70,13 @@ func tbvTraySettings(_ *C.GtkMenuItem, _ C.gpointer) {
 func tbvTrayDashboard(_ *C.GtkMenuItem, _ C.gpointer) {
 	if active != nil && active.actions.OnDashboard != nil {
 		active.actions.OnDashboard()
+	}
+}
+
+//export tbvTrayRecord
+func tbvTrayRecord(_ *C.GtkMenuItem, _ C.gpointer) {
+	if active != nil && active.actions.OnRecord != nil {
+		active.actions.OnRecord()
 	}
 }
 

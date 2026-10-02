@@ -50,8 +50,13 @@ func NewPill(app *gtk.Application, onRetry func()) *Pill {
 	return p
 }
 
-// Show renders the pill for the status.
+// Show renders the pill for the status, hiding it for the hidden state so an
+// empty box never lingers after a dictation.
 func (p *Pill) Show(status platform.PillStatus) {
+	if status.State == platform.PillHidden {
+		p.window.SetVisible(false)
+		return
+	}
 	view := platform.RenderPill(status)
 	p.label.SetText(view.Label)
 	p.level.SetVisible(view.ShowLevel)

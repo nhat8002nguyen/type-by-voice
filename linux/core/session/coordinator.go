@@ -417,9 +417,12 @@ func (c *Coordinator) handleUnauthenticated(ctx context.Context, err error) bool
 		return false
 	}
 	c.refreshed = true
-	if refreshErr := c.auth.RefreshIfNeeded(ctx); refreshErr != nil {
+	if refreshErr := c.auth.Refresh(ctx); refreshErr != nil {
 		return false
 	}
+	// Drop the warm socket so the retry reconnects with the refreshed bearer
+	// instead of reusing the connection that failed authentication.
+	_ = c.engine.Close()
 	reqID := c.requestID
 	go func() {
 		ready, rerr := c.engine.Start(ctx, reqID)

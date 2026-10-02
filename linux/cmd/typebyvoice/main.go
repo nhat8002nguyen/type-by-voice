@@ -23,8 +23,10 @@ import (
 	"github.com/nhat8002nguyen/type-by-voice/linux/app/instance"
 	"github.com/nhat8002nguyen/type-by-voice/linux/app/overlay"
 	"github.com/nhat8002nguyen/type-by-voice/linux/app/tray"
+	"github.com/nhat8002nguyen/type-by-voice/linux/app/ui"
 	coreaudio "github.com/nhat8002nguyen/type-by-voice/linux/core/audio"
 	"github.com/nhat8002nguyen/type-by-voice/linux/core/auth"
+	"github.com/nhat8002nguyen/type-by-voice/linux/core/history"
 	"github.com/nhat8002nguyen/type-by-voice/linux/core/platform"
 	"github.com/nhat8002nguyen/type-by-voice/linux/core/session"
 	"github.com/nhat8002nguyen/type-by-voice/linux/core/sessiontype"
@@ -54,7 +56,8 @@ func main() {
 	apiURL, dictateURL := endpoints()
 	deviceID := loadOrCreateDeviceID(state)
 
-	tokens := auth.NewFileTokenStore(filepath.Join(state, "tokens.json"))
+	// Tokens live in the Secret Service (GNOME Keyring).
+	tokens := auth.NewKeyringTokenStore("typebyvoice")
 	var authStore *auth.Store
 	httpClient := auth.NewHTTPClient(apiURL, http.DefaultClient, func() string {
 		if authStore == nil {
@@ -104,10 +107,23 @@ func main() {
 	pill := overlay.NewPill(app, func() { _ = coordinator.Toggle(context.Background()) })
 	coordinator.OnPillChanged(func(status platform.PillStatus) { pill.Show(status) })
 
+	execPath, _ := os.Executable()
+	historyClient := history.NewClient(httpClient)
 	trayIcon, err := tray.New(tray.Actions{
-		OnSettings:  func() {},
-		OnDashboard: func() {},
-		OnQuit:      func() { app.Quit() },
+		OnRecord: func() { _ = coordinator.Toggle(context.Background()) },
+		OnSettings: func() {
+			ui.ShowSettings(app, ui.SettingsDeps{
+				Settings:  &cfg,
+				ConfigDir: cfgDir,
+				ExecPath:  execPath,
+				Devices:   appaudio.ListDevices,
+				OnSave:    func(s settings.Store) { cfg = s },
+			})
+		},
+		OnDashboard: func() {
+			ui.ShowDashboard(app, ui.DashboardDeps{History: historyClient})
+		},
+		OnQuit: func() { app.Quit() },
 	})
 	if err != nil {
 		log.Printf("tray: %v", err)
@@ -119,6 +135,18 @@ func main() {
 	}
 
 	app.ConnectActivate(func() {
+		// First run: no account yet, so open onboarding (which also signs in).
+		if authStore.AccountEmail() == "" {
+			ui.ShowOnboarding(app, ui.OnboardingDeps{
+				Auth:     authStore,
+				Settings: &cfg,
+				Devices:  appaudio.ListDevices,
+				OnDone: func(s settings.Store) {
+					cfg = s
+					_ = s.SaveTo(cfgDir)
+				},
+			})
+		}
 		if hkErr == nil {
 			if err := hk.Start(); err != nil {
 				log.Printf("hotkey start: %v", err)

@@ -23,7 +23,8 @@ type SilenceDetector struct {
 	holdSamples        int
 
 	elapsed    int
-	floor      float64
+	floorSum   float64
+	calFrames  int
 	threshold  float64
 	calibrated bool
 
@@ -65,13 +66,16 @@ func (d *SilenceDetector) Process(samples []int16) {
 	rms := frameRMS(samples)
 
 	if !d.calibrated {
-		if rms > d.floor {
-			d.floor = rms
-		}
+		// The floor is the mean loudness of the calibration window, not its
+		// peak: a word spoken while connecting must not raise the floor enough
+		// to hide the rest of the utterance.
+		d.floorSum += rms
+		d.calFrames++
 		d.elapsed += len(samples)
 		if d.elapsed >= d.calibrationSamples {
 			d.calibrated = true
-			d.threshold = math.Max(d.floor, minFloorRMS) * speechFactor
+			mean := d.floorSum / float64(d.calFrames)
+			d.threshold = math.Max(mean, minFloorRMS) * speechFactor
 		}
 		return
 	}
@@ -106,7 +110,8 @@ func (d *SilenceDetector) QuietMs() int { return d.quiet * 1000 / silenceSampleR
 // Reset returns the detector to its pre-calibration state.
 func (d *SilenceDetector) Reset() {
 	d.elapsed = 0
-	d.floor = 0
+	d.floorSum = 0
+	d.calFrames = 0
 	d.threshold = 0
 	d.calibrated = false
 	d.speaking = false

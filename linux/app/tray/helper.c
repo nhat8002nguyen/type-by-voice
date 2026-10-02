@@ -8,6 +8,7 @@
 // Implemented in Go with //export.
 void tbvTraySettings(GtkMenuItem *item, gpointer data);
 void tbvTrayDashboard(GtkMenuItem *item, gpointer data);
+void tbvTrayRecord(GtkMenuItem *item, gpointer data);
 void tbvTrayQuit(GtkMenuItem *item, gpointer data);
 
 GtkWidget *tbv_menu_new(void) { return gtk_menu_new(); }
@@ -17,7 +18,8 @@ void tbv_menu_append(GtkWidget *menu, const char *label, int id) {
 	switch (id) {
 	case 0: cb = G_CALLBACK(tbvTraySettings); break;
 	case 1: cb = G_CALLBACK(tbvTrayDashboard); break;
-	case 2: cb = G_CALLBACK(tbvTrayQuit); break;
+	case 2: cb = G_CALLBACK(tbvTrayRecord); break;
+	case 3: cb = G_CALLBACK(tbvTrayQuit); break;
 	}
 	GtkWidget *item = gtk_menu_item_new_with_label(label);
 	g_signal_connect(G_OBJECT(item), "activate", cb, GINT_TO_POINTER(id));

@@ -95,6 +95,7 @@ type fakeEngine struct {
 	startCalls    int
 	stopCalls     int
 	cancelCalls   int
+	closeCalls    int
 	sentAudio     [][]byte
 }
 
@@ -146,7 +147,18 @@ func (f *fakeEngine) Cancel(context.Context) error {
 	return nil
 }
 
-func (f *fakeEngine) Close() error { return nil }
+func (f *fakeEngine) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closeCalls++
+	return nil
+}
+
+func (f *fakeEngine) closeCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.closeCalls
+}
 
 func (f *fakeEngine) release() {
 	f.mu.Lock()
@@ -202,7 +214,7 @@ type fakeRefresher struct {
 	err   error
 }
 
-func (f *fakeRefresher) RefreshIfNeeded(context.Context) error {
+func (f *fakeRefresher) Refresh(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -612,5 +624,9 @@ func TestUnauthenticatedRefreshesOnceAndReconnects(t *testing.T) {
 	start, _, _ := h.engine.counts()
 	if start != 2 {
 		t.Errorf("engine.start called %d times, want 2 (one retry)", start)
+	}
+	// The warm socket must be dropped so the reconnect carries the new bearer.
+	if closed := h.engine.closeCount(); closed != 1 {
+		t.Errorf("engine.close called %d times, want 1 (force a reconnect)", closed)
 	}
 }

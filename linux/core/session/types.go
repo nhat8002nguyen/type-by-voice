@@ -74,8 +74,9 @@ func NewTimeouts() Timeouts {
 	}
 }
 
-// Refresher is the piece of auth the coordinator needs: a single refresh
-// attempt after an unauthenticated protocol error. *auth.Store satisfies it.
+// Refresher is the piece of auth the coordinator needs: a forced token refresh
+// after an unauthenticated protocol error (the client's own expiry may still
+// look valid), so the reconnect uses a fresh bearer. *auth.Store satisfies it.
 type Refresher interface {
-	RefreshIfNeeded(ctx context.Context) error
+	Refresh(ctx context.Context) error
 }

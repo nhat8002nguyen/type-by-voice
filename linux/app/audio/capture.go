@@ -62,6 +62,11 @@ func ListDevices() ([]string, error) {
 }
 
 func (c *capture) Start(context.Context) error {
+	// Release any device from a previous session so streams do not leak.
+	if c.device != nil {
+		c.device.Uninit()
+		c.device = nil
+	}
 	cfg := malgo.DefaultDeviceConfig(malgo.Capture)
 	cfg.Capture.Format = malgo.FormatS16
 	cfg.Capture.Channels = 1

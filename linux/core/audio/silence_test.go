@@ -138,3 +138,20 @@ func TestQuietMsCountsTheQuietRun(t *testing.T) {
 		t.Errorf("quietMs = %d, want 400", got)
 	}
 }
+
+// A loud frame inside the calibration window must not raise the noise floor
+// enough to mask the speech that follows. This is the "speak immediately" case:
+// the floor is the mean of the calibration window, not its peak.
+func TestSpeechDuringCalibrationIsStillDetected(t *testing.T) {
+	d := NewSilenceDetector(300)
+	var speech int
+	d.OnSpeechStarted(func() { speech++ })
+
+	feed(d, tone(20, 10000))  // one loud frame inside calibration
+	feed(d, quiet(280))       // the rest of calibration is quiet
+	feed(d, tone(300, 10000)) // real speech
+
+	if speech == 0 {
+		t.Errorf("speech was not detected after a loud frame during calibration")
+	}
+}

@@ -81,7 +81,8 @@ func synthesizeCtrlV() error {
 		if release {
 			typ = byte(xproto.KeyRelease)
 		}
-		_ = xtest.FakeInput(conn, typ, byte(kc), 0, 0, 0, 0)
+		// deviceid 0 lets XTest pick the virtual core keyboard.
+		_ = xtest.FakeInput(conn, typ, byte(kc), 0, 0, 0, 0, 0)
 	}
 	press(ctrl, false)
 	press(v, false)

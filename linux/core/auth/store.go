@@ -137,12 +137,18 @@ func (s *Store) Login(ctx context.Context, email, password string) error {
 }
 
 // RefreshIfNeeded refreshes the access token when it is missing or within 30 s
-// of expiry. It performs at most one refresh attempt. Callers use it once after
-// an unauthenticated protocol error.
+// of expiry. It performs at most one refresh attempt.
 func (s *Store) RefreshIfNeeded(ctx context.Context) error {
 	if s.accessToken != "" && s.now().Before(s.expiresAt.Add(-30*time.Second)) {
 		return nil
 	}
+	return s.Refresh(ctx)
+}
+
+// Refresh forces a token refresh regardless of the client's own expiry. The
+// coordinator calls it after the server rejects the access token as
+// unauthenticated, where the local expiry may still look valid.
+func (s *Store) Refresh(ctx context.Context) error {
 	refresh, err := s.tokens.Get(true)
 	if err != nil || refresh == "" {
 		return &Error{Code: MissingRefreshToken, Message: "no refresh token"}

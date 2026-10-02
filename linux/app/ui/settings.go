@@ -48,10 +48,12 @@ func ShowSettings(app *gtk.Application, deps SettingsDeps) {
 	cap.SetValue(float64(cfg.HardCapMs))
 	box.Append(labeled("Hard cap (ms)", cap))
 
-	mode := gtk.NewDropDownFromStrings([]string{settings.InsertionPaste, settings.InsertionClipboardOnly})
+	modes := []string{settings.InsertionPaste, settings.InsertionClipboardOnly}
+	mode := gtk.NewDropDownFromStrings(modes)
 	box.Append(labeled("Insertion mode", mode))
 
-	mic := gtk.NewDropDownFromStrings(deviceNames(OnboardingDeps{Devices: deps.Devices}))
+	micNames := deviceNames(OnboardingDeps{Devices: deps.Devices})
+	mic := gtk.NewDropDownFromStrings(micNames)
 	box.Append(labeled("Microphone", mic))
 
 	launch := gtk.NewSwitch()
@@ -74,8 +76,14 @@ func ShowSettings(app *gtk.Application, deps SettingsDeps) {
 	save.ConnectClicked(func() {
 		cfg.SilenceDurationMs = int(silence.Value())
 		cfg.HardCapMs = int(cap.Value())
-		cfg.InsertionMode = mode.SelectedString()
-		cfg.Microphone = mic.SelectedString()
+		if idx := int(mode.Selected()); idx >= 0 && idx < len(modes) {
+			cfg.InsertionMode = modes[idx]
+		}
+		if idx := int(mic.Selected()); idx > 0 && idx < len(micNames) {
+			cfg.Microphone = micNames[idx]
+		} else {
+			cfg.Microphone = ""
+		}
 		cfg.LaunchAtLogin = launch.Active()
 		if err := cfg.SaveTo(deps.ConfigDir); err != nil {
 			log.Printf("save settings: %v", err)
