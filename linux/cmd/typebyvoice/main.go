@@ -79,6 +79,15 @@ func main() {
 		DeviceID:      deviceID,
 	}, cfgDir)
 
+	// A fresh process holds no access token in memory, so without this the
+	// WebSocket upgrade would carry an empty bearer and be closed 4401. If a
+	// refresh token is stored, exchange it now.
+	if authStore.AccountEmail() != "" {
+		if err := authStore.RefreshIfNeeded(context.Background()); err != nil {
+			log.Printf("auth: startup refresh: %v", err)
+		}
+	}
+
 	capture, err := appaudio.NewCapture(cfg.Microphone)
 	if err != nil {
 		log.Fatalf("capture: %v", err)

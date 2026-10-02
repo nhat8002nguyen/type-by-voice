@@ -2,6 +2,7 @@ package transcription
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/coder/websocket"
@@ -57,9 +58,28 @@ func (s *webSocketSocket) SendBinary(ctx context.Context, data []byte) error {
 func (s *webSocketSocket) Receive(ctx context.Context) (Message, error) {
 	typ, data, err := s.conn.Read(ctx)
 	if err != nil {
-		return Message{}, err
+		return Message{}, mapClose(err)
 	}
 	return Message{IsText: typ == websocket.MessageText, Text: string(data), Data: data}, nil
+}
+
+// mapClose turns a server close carrying a protocol close code into the
+// matching protocol error, so the coordinator's one-refresh-and-reconnect path
+// runs on an authentication close as well as on an `error` frame.
+func mapClose(err error) error {
+	var closeErr websocket.CloseError
+	if !errors.As(err, &closeErr) {
+		return err
+	}
+	switch closeErr.Code {
+	case 4401:
+		return &TranscriptionError{Code: "unauthenticated", Message: "authentication failed at upgrade"}
+	case 4403:
+		return &TranscriptionError{Code: "quota_exceeded", Message: "quota exhausted"}
+	case 4429:
+		return &TranscriptionError{Code: "rate_limited", Message: "rate limited"}
+	}
+	return err
 }
 
 func (s *webSocketSocket) Close() error {

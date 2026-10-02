@@ -3,6 +3,7 @@ package transcription
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -189,5 +190,11 @@ func errorFromMessage(m *ErrorMessage) *TranscriptionError {
 }
 
 func wrapErr(err error) *TranscriptionError {
+	// Preserve an already-classified protocol error (for example a close code
+	// mapped by the socket) instead of flattening it to "internal".
+	var te *TranscriptionError
+	if errors.As(err, &te) {
+		return te
+	}
 	return &TranscriptionError{Code: "internal", Message: err.Error(), Retryable: true}
 }
