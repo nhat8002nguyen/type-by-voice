@@ -19,7 +19,7 @@ func NewInserter(session sessiontype.SessionType, cb platform.Clipboard, restore
 	if session == sessiontype.X11 {
 		return &x11Inserter{clipboard: cb, restoreDelay: restoreDelay, notify: notify}
 	}
-	return &clipboardInserter{clipboard: cb, notify: notify}
+	return NewWaylandInserter(session, WtypeAvailable(), cb, restoreDelay, notify)
 }
 
 type x11Inserter struct {
