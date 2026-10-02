@@ -27,7 +27,7 @@ describe('CheckQuotaRequestDto', () => {
   it('rejects an unknown platform and a non-uuid deviceId', async () => {
     const errors = await validate(
       checkQuotaRequest({
-        platform: 'linux' as CheckQuotaRequestDto['platform'],
+        platform: 'beos' as CheckQuotaRequestDto['platform'],
         deviceId: 'not-a-uuid',
       }),
     );

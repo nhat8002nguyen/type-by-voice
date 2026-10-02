@@ -8,7 +8,7 @@ export class CheckQuotaRequestDto {
   @IsUUID('4')
   sessionId: string;
 
-  @IsIn(['macos', 'windows', 'ios', 'android'])
+  @IsIn(['macos', 'windows', 'ios', 'android', 'linux'])
   platform: Platform;
 
   @IsString()
