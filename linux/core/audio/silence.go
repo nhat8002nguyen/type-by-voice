@@ -76,32 +76,32 @@ func (d *SilenceDetector) Process(samples []int16) {
 		return
 	}
 
-	if !d.speaking {
-		if rms > d.threshold {
+	// A loud frame is speech: mark it and reset the quiet run.
+	if rms > d.threshold {
+		if !d.speaking {
 			d.speaking = true
-			d.quiet = 0
 			if d.onSpeech != nil {
 				d.onSpeech()
 			}
 		}
+		d.quiet = 0
 		return
 	}
 
-	// Speaking: reset the quiet run on speech, otherwise count it and fire
-	// SilenceStarted once the hold is reached.
-	if rms > d.threshold {
-		d.quiet = 0
-		return
-	}
+	// A quiet frame accumulates; once the hold elapses, speech has ended.
+	// d.quiet keeps growing while quiet, so QuietMs reports the whole run.
 	d.quiet += len(samples)
-	if d.quiet >= d.holdSamples {
+	if d.speaking && d.quiet >= d.holdSamples {
 		d.speaking = false
-		d.quiet = 0
 		if d.onSilence != nil {
 			d.onSilence()
 		}
 	}
 }
+
+// QuietMs is the current quiet run's length in milliseconds, since the last
+// speech frame. The coordinator uses it for the silence auto-stop.
+func (d *SilenceDetector) QuietMs() int { return d.quiet * 1000 / silenceSampleRate }
 
 // Reset returns the detector to its pre-calibration state.
 func (d *SilenceDetector) Reset() {

@@ -127,3 +127,14 @@ func TestResetClearsState(t *testing.T) {
 		t.Errorf("silence started %d times after Reset, want 0", silence)
 	}
 }
+
+func TestQuietMsCountsTheQuietRun(t *testing.T) {
+	d := NewSilenceDetector(300)
+	feed(d, quiet(300))
+	feed(d, tone(200, 10000))
+	feed(d, quiet(400))
+
+	if got := d.QuietMs(); got != 400 {
+		t.Errorf("quietMs = %d, want 400", got)
+	}
+}
