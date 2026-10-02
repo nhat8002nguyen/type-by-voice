@@ -60,28 +60,28 @@ func (t *Tray) SetStatus(status platform.PillStatus) {
 }
 
 //export tbvTraySettings
-func tbvTraySettings(_ *C.GtkMenuItem, _ C.gpointer) {
+func tbvTraySettings(item *C.GtkMenuItem, data C.gpointer) {
 	if active != nil && active.actions.OnSettings != nil {
 		active.actions.OnSettings()
 	}
 }
 
 //export tbvTrayDashboard
-func tbvTrayDashboard(_ *C.GtkMenuItem, _ C.gpointer) {
+func tbvTrayDashboard(item *C.GtkMenuItem, data C.gpointer) {
 	if active != nil && active.actions.OnDashboard != nil {
 		active.actions.OnDashboard()
 	}
 }
 
 //export tbvTrayRecord
-func tbvTrayRecord(_ *C.GtkMenuItem, _ C.gpointer) {
+func tbvTrayRecord(item *C.GtkMenuItem, data C.gpointer) {
 	if active != nil && active.actions.OnRecord != nil {
 		active.actions.OnRecord()
 	}
 }
 
 //export tbvTrayQuit
-func tbvTrayQuit(_ *C.GtkMenuItem, _ C.gpointer) {
+func tbvTrayQuit(item *C.GtkMenuItem, data C.gpointer) {
 	if active != nil && active.actions.OnQuit != nil {
 		active.actions.OnQuit()
 	}

@@ -43,7 +43,6 @@ func NewPill(app *gtk.Application, onRetry func()) *Pill {
 	// Never take focus: this is the Linux analogue of the macOS non-activating
 	// NSPanel. On X11 the window manager may still focus it; if so, an
 	// override-redirect window is the fallback (verified in the VM).
-	win.SetFocusable(false)
 	win.SetCanFocus(false)
 	win.SetChild(box)
 	p.window = win

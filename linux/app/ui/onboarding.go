@@ -63,7 +63,7 @@ func stepAuth(deps OnboardingDeps, stack *gtk.Stack, win *gtk.ApplicationWindow)
 
 	signIn := gtk.NewButtonWithLabel("Sign in")
 	signIn.ConnectClicked(func() {
-		if err := deps.Auth.Login(gtkCtx, email.Text(), password.Text()); err != nil {
+		if err := deps.Auth.Login(gtkCtx, email.Buffer().Text(), password.Buffer().Text()); err != nil {
 			log.Printf("login: %v", err)
 			return
 		}
@@ -71,7 +71,7 @@ func stepAuth(deps OnboardingDeps, stack *gtk.Stack, win *gtk.ApplicationWindow)
 	})
 	create := gtk.NewButtonWithLabel("Create account")
 	create.ConnectClicked(func() {
-		if err := deps.Auth.Register(gtkCtx, email.Text(), password.Text()); err != nil {
+		if err := deps.Auth.Register(gtkCtx, email.Buffer().Text(), password.Buffer().Text()); err != nil {
 			log.Printf("register: %v", err)
 			return
 		}

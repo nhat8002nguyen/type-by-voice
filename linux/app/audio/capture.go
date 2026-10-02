@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sync"
+	"unsafe"
 
 	"github.com/gen2brain/malgo"
 
@@ -73,7 +74,7 @@ func (c *capture) Start(context.Context) error {
 	cfg.Capture.SampleRate = captureSampleRate
 	if c.deviceName != "" {
 		if dev, err := c.findDevice(c.deviceName); err == nil {
-			cfg.Capture.DeviceID = dev.ID.Pointer()
+			cfg.Capture.DeviceID = unsafe.Pointer(&dev.ID[0])
 		}
 	}
 	callbacks := malgo.DeviceCallbacks{

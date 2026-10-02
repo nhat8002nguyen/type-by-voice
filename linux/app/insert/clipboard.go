@@ -39,28 +39,29 @@ type x11Clipboard struct {
 	saved []byte
 }
 
-func (c *x11Clipboard) Save(context.Context) error {
+func (c *x11Clipboard) Save(ctx context.Context) error {
 	if err := ensureClipboard(); err != nil {
 		return err
 	}
-	c.saved = clipboard.Read(clipboard.FmtText)
+	data, _ := clipboard.Read(ctx, clipboard.FmtText)
+	c.saved = data
 	return nil
 }
 
-func (c *x11Clipboard) SetText(_ context.Context, text string) error {
+func (c *x11Clipboard) SetText(ctx context.Context, text string) error {
 	if err := ensureClipboard(); err != nil {
 		return err
 	}
-	clipboard.Write(clipboard.FmtText, []byte(text))
+	_, _ = clipboard.Write(ctx, clipboard.FmtText, []byte(text))
 	return nil
 }
 
-func (c *x11Clipboard) Restore(context.Context) error {
+func (c *x11Clipboard) Restore(ctx context.Context) error {
 	if err := ensureClipboard(); err != nil {
 		return err
 	}
 	if c.saved != nil {
-		clipboard.Write(clipboard.FmtText, c.saved)
+		_, _ = clipboard.Write(ctx, clipboard.FmtText, c.saved)
 	}
 	return nil
 }
