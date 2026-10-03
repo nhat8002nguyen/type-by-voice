@@ -343,10 +343,6 @@ export class DictateService {
   /**
    * transcribeAndFinalize sends assembled audio to speech-service, commits quota, and enqueues transcript persistence.
    * Completes or fails the DictationSession based on provider and quota RPC outcomes.
-   */
-  /**
-   * transcribeAndFinalize sends assembled audio to speech-service, commits quota, and enqueues transcript persistence.
-   * Completes or fails the DictationSession based on provider and quota RPC outcomes.
    * Forwards the request's language and translation mode to speech-service and quota-service.
    */
   private async transcribeAndFinalize(output: {

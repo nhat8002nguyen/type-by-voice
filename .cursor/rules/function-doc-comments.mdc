@@ -63,4 +63,10 @@ private obscureHelper() {
 }
 ```
 
-When editing a function that already has a doc, **update the comment** if the abstract behavior changed.
+## Updating existing docs
+
+When editing a function that already has a doc, **update the existing comment in place**; do not add a second block.
+
+- A function/method/field must have **exactly one** JSDoc block. If the declaration already has a doc, edit that block — never insert a fresh one above the old.
+- Never leave a stale block behind. If the old sentences no longer hold, rewrite or delete them; do not append a new block while the old one remains.
+- If you find two adjacent blocks (a duplication mistake), merge them into one and delete the stale copy.
