@@ -1,0 +1,16 @@
+---
+description: Ask before letting postman/ drift from backend API changes
+globs: "backend/apps/api/**/*.ts, backend/libs/**/*.ts, contracts/dictation-v1/**/*.ts"
+alwaysApply: false
+---
+
+# Postman sync on backend API changes
+
+`postman/` is the manual API test surface for the public `api` process. It must match the routes the code actually serves.
+
+When a backend API change is **approved or merged**, **ask the user to confirm updating `postman/`** before finishing the task.
+
+- A "backend API change" means an HTTP route in `backend/apps/api` (method, path, status code, request/response shape, auth), a DTO those routes use, or the `/v1/dictate` WebSocket protocol in `contracts/dictation-v1`.
+- Ask explicitly — for example: "This changes the API — should I update `postman/` to match?" Do not assume yes, and do not stay silent.
+- On confirmation, update `postman/Type-by-Voice-API.postman_collection.json` (and `postman/local.postman_environment.json` when new variables are needed) so every endpoint and status code matches the code.
+- Never let the collection silently drift from the API.
