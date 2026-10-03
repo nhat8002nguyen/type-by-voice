@@ -27,7 +27,7 @@ export class FakeSpeechProvider implements SpeechProvider {
   /** transcribe converts audio into text and reports provider latency metadata. */
   async transcribe(
     _audio: Buffer,
-    _opts: { language: string },
+    _opts: { language?: string; translateToEnglish?: boolean },
   ): Promise<{ text: string; providerLatencyMs: number }> {
     return { text: 'the transcribed text', providerLatencyMs: 0 };
   }
@@ -35,7 +35,10 @@ export class FakeSpeechProvider implements SpeechProvider {
 
 const GROQ_TRANSCRIPTIONS_URL =
   'https://api.groq.com/openai/v1/audio/transcriptions';
+const GROQ_TRANSLATIONS_URL =
+  'https://api.groq.com/openai/v1/audio/translations';
 const DEFAULT_GROQ_MODEL = 'whisper-large-v3-turbo';
+const TRANSLATION_MODEL = 'whisper-large-v3';
 
 /** resolveGroqModel returns the model id from env with a safe default. */
 export function resolveGroqModel(env: NodeJS.Dict<string> = process.env): string {
@@ -77,14 +80,19 @@ export class GroqSpeechProvider implements SpeechProvider {
     this.logger.log(`whisper model=${this.model}`);
   }
 
-  /** transcribe converts audio into text and reports provider latency metadata. */
+  /** transcribe posts one Ogg payload to Groq, transcribing or translating to English in a single call, and reports provider latency. */
   async transcribe(
     audio: Buffer,
-    opts: { language: string },
+    opts: { language?: string; translateToEnglish?: boolean },
   ): Promise<{ text: string; providerLatencyMs: number }> {
+    const translate =
+      opts.translateToEnglish === true && opts.language !== 'en';
+    const url = translate ? GROQ_TRANSLATIONS_URL : GROQ_TRANSCRIPTIONS_URL;
     const body = new FormData();
-    body.append('model', this.model);
-    body.append('language', opts.language);
+    body.append('model', translate ? TRANSLATION_MODEL : this.model);
+    if (!translate && opts.language !== undefined) {
+      body.append('language', opts.language);
+    }
     body.append(
       'file',
       new Blob([new Uint8Array(audio)], { type: 'audio/ogg' }),
@@ -94,7 +102,7 @@ export class GroqSpeechProvider implements SpeechProvider {
     const startedAt = Date.now();
     let response: Awaited<ReturnType<GroqFetch>>;
     try {
-      response = await this.fetchFn(GROQ_TRANSCRIPTIONS_URL, {
+      response = await this.fetchFn(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -111,11 +119,11 @@ export class GroqSpeechProvider implements SpeechProvider {
     if (!response.ok) {
       if ((response.status ?? 500) >= 500) {
         throw new ProviderUnavailableError(
-          `Groq transcription failed with status ${response.status ?? 'unknown'}`,
+          `Groq speech request failed with status ${response.status ?? 'unknown'}`,
         );
       }
       throw new Error(
-        `Groq transcription failed with status ${response.status}`,
+        `Groq speech request failed with status ${response.status}`,
       );
     }
 

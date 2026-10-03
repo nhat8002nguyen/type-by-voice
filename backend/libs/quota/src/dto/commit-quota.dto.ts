@@ -1,4 +1,11 @@
-import { IsIn, IsInt, IsString, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 import type { Platform, QuotaSnapshot } from '@type-by-voice/dictation-v1';
 
 export class CommitQuotaRequestDto {
@@ -31,6 +38,14 @@ export class CommitQuotaRequestDto {
 
   @IsInt()
   estimatedCostMicros: number;
+
+  @IsOptional()
+  @IsIn(['en', 'vi'])
+  language?: 'en' | 'vi';
+
+  @IsOptional()
+  @IsBoolean()
+  translateToEnglish?: boolean;
 }
 
 export class CommitQuotaResponseDto {

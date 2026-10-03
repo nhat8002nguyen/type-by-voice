@@ -57,6 +57,8 @@ describe('DictationSession happy path', () => {
         requestId: '3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f',
         audio: chunk,
         listInHistory: true,
+        language: 'en',
+        translateToEnglish: false,
       },
     ]);
   });
@@ -77,8 +79,48 @@ describe('DictationSession happy path', () => {
         requestId: '3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f',
         audio: chunk,
         listInHistory: false,
+        language: 'en',
+        translateToEnglish: false,
       },
     ]);
+  });
+
+  it('carries language vi and translateToEnglish onto the transcribe output', () => {
+    const s = session();
+    const start = {
+      ...loadFixture<StartMessage>('start.valid.json'),
+      language: 'vi',
+      translateToEnglish: true,
+    };
+    s.handle({ kind: 'text', data: start });
+    const chunk = new Uint8Array([9]);
+    s.handle({ kind: 'binary', bytes: chunk });
+    const out = s.handle({ kind: 'text', data: loadFixture('stop.valid.json') });
+    expect(out).toEqual([
+      {
+        kind: 'transcribe',
+        requestId: '3f2b0c8e-1a2b-4c5d-8e9f-0a1b2c3d4e5f',
+        audio: chunk,
+        listInHistory: true,
+        language: 'vi',
+        translateToEnglish: true,
+      },
+    ]);
+  });
+
+  it('auto-detects when language is omitted and defaults translateToEnglish to false', () => {
+    const s = session();
+    const { language: _omitted, ...start } =
+      loadFixture<StartMessage>('start.valid.json');
+    s.handle({ kind: 'text', data: start });
+    s.handle({ kind: 'binary', bytes: new Uint8Array([1]) });
+    const out = s.handle({ kind: 'text', data: loadFixture('stop.valid.json') });
+    expect(out[0]).toMatchObject({
+      kind: 'transcribe',
+      listInHistory: true,
+      translateToEnglish: false,
+    });
+    expect((out[0] as { language?: string }).language).toBeUndefined();
   });
 
   it('emits final and closes after completeTranscription', () => {

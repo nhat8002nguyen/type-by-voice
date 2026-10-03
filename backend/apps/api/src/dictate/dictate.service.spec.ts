@@ -5,6 +5,7 @@ import {
   QUOTA_CHECK_PATTERN,
   QUOTA_COMMIT_PATTERN,
 } from '../../../../libs/quota/src/tokens.js';
+import { SPEECH_TRANSCRIBE_PATTERN } from '../../../../libs/speech/src/tokens.js';
 import { DictateService } from './dictate.service.js';
 import type { ReadyMessage, StartMessage } from '@type-by-voice/dictation-v1';
 
@@ -86,6 +87,91 @@ describe('DictateService', () => {
       QUOTA_COMMIT_PATTERN,
       expect.objectContaining({ wordCount: 3 }),
     );
+  });
+
+  it('forwards language and translateToEnglish to speech and quota', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === QUOTA_CHECK_PATTERN
+            ? {
+                allowed: true,
+                quota: loadFixture<ReadyMessage>('ready.json').quota,
+              }
+            : { quota: loadFixture<ReadyMessage>('ready.json').quota },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
+    };
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
+    const start = {
+      ...loadFixture<StartMessage>('start.valid.json'),
+      language: 'vi',
+      translateToEnglish: true,
+    };
+    await service.onText(start);
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('stop.valid.json'));
+    expect(speech.send).toHaveBeenCalledWith(
+      SPEECH_TRANSCRIBE_PATTERN,
+      expect.objectContaining({ language: 'vi', translateToEnglish: true }),
+    );
+    expect(quota.send).toHaveBeenCalledWith(
+      QUOTA_COMMIT_PATTERN,
+      expect.objectContaining({ language: 'vi', translateToEnglish: true }),
+    );
+  });
+
+  it('exposes the language mode of the completed session', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === QUOTA_CHECK_PATTERN
+            ? {
+                allowed: true,
+                quota: loadFixture<ReadyMessage>('ready.json').quota,
+              }
+            : { quota: loadFixture<ReadyMessage>('ready.json').quota },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
+    };
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
+    const start = {
+      ...loadFixture<StartMessage>('start.valid.json'),
+      language: 'vi',
+      translateToEnglish: true,
+    };
+    await service.onText(start);
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('stop.valid.json'));
+    expect(service.languageMode).toBe('vi-en');
   });
 
   it('enqueues workflows.create with listInHistory from start', async () => {

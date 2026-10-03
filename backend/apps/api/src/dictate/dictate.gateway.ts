@@ -361,6 +361,7 @@ export class DictateGateway
         if (message.type === 'final') {
           this.metrics.record({
             platform: service.platform,
+            mode: service.languageMode,
             connectMs: client.connectMs ?? 0,
             audioReceivedMs: service.audioReceivedMs,
             providerMs: service.providerMs,

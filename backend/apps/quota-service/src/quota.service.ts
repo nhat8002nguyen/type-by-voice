@@ -275,6 +275,8 @@ export class QuotaService {
     record.provider = dto.provider;
     record.providerLatencyMs = dto.providerLatencyMs;
     record.estimatedCostMicros = dto.estimatedCostMicros;
+    record.language = dto.language ?? null;
+    record.translateToEnglish = dto.translateToEnglish ?? false;
     record.createdAt = now;
     return record;
   }

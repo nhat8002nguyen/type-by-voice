@@ -35,7 +35,11 @@ import {
 } from '@type-by-voice/dictation-v1';
 import { firstValueFrom } from 'rxjs';
 import { SessionRegistry } from './session-registry.js';
-import { DictateMetrics } from '../metrics/dictate-metrics.js';
+import {
+  DictateMetrics,
+  languageModeOf,
+  type LanguageMode,
+} from '../metrics/dictate-metrics.js';
 
 const BYTES_PER_MS = 3;
 const COST_MICROS_PER_HOUR = 40_000;
@@ -86,6 +90,7 @@ export class DictateService {
   #pendingClose: DictateClose | undefined;
   #audioReceivedAtMs: number | undefined;
   #providerMs = 0;
+  #languageMode: LanguageMode = 'auto';
 
   constructor(
     quota: QuotaClient,
@@ -128,6 +133,11 @@ export class DictateService {
   /** providerMs returns the last speech-provider round-trip duration in milliseconds. */
   get providerMs(): number {
     return this.#providerMs;
+  }
+
+  /** languageMode returns the latency-tagging mode (for example "vi-en") of this session. */
+  get languageMode(): LanguageMode {
+    return this.#languageMode;
   }
 
   /** isBusy reports whether the session is waiting on transcription after stop. */
@@ -333,12 +343,19 @@ export class DictateService {
   /**
    * transcribeAndFinalize sends assembled audio to speech-service, commits quota, and enqueues transcript persistence.
    * Completes or fails the DictationSession based on provider and quota RPC outcomes.
+   * Forwards the request's language and translation mode to speech-service and quota-service.
    */
   private async transcribeAndFinalize(output: {
     requestId: string;
     audio: Uint8Array;
     listInHistory: boolean;
+    language?: 'en' | 'vi';
+    translateToEnglish: boolean;
   }): Promise<ServerTextMessage | undefined> {
+    this.#languageMode = languageModeOf(
+      output.language,
+      output.translateToEnglish,
+    );
     const session = this.#session;
     if (session === undefined) {
       return undefined;
@@ -352,7 +369,8 @@ export class DictateService {
           SPEECH_TRANSCRIBE_PATTERN,
           {
             requestId: output.requestId,
-            language: 'en',
+            language: output.language,
+            translateToEnglish: output.translateToEnglish,
             audioBase64: Buffer.from(output.audio).toString('base64'),
           },
         ),
@@ -381,6 +399,8 @@ export class DictateService {
             provider: result.provider,
             providerLatencyMs: result.providerLatencyMs,
             estimatedCostMicros: estimatedCostMicros(audioMs),
+            language: output.language,
+            translateToEnglish: output.translateToEnglish,
           },
         ),
       );
