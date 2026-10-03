@@ -24,12 +24,14 @@ export class SpeechController {
       Buffer.from(dto.audioBase64, 'base64'),
       {
         language: dto.language,
+        translateToEnglish: dto.translateToEnglish,
       },
     );
     this.speechService.logCompleted(
       dto.requestId,
       result.providerLatencyMs,
       this.provider.model,
+      dto.translateToEnglish,
     );
     return {
       text: result.text,

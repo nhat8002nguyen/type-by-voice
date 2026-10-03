@@ -143,4 +143,54 @@ describe('GroqSpeechProvider', () => {
       provider.transcribe(Buffer.from('OggS'), { language: 'en' }),
     ).rejects.toBeInstanceOf(ProviderUnavailableError);
   });
+
+  it('routes translateToEnglish to the translations endpoint with whisper-large-v3 and no language field', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ text: 'ok' }) });
+    const provider = new GroqSpeechProvider({
+      apiKey: 'gsk_test',
+      fetch: fetchMock,
+    });
+    await provider.transcribe(Buffer.from('OggS'), {
+      language: 'vi',
+      translateToEnglish: true,
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.groq.com/openai/v1/audio/translations');
+    expect((init.body as FormData).get('model')).toBe('whisper-large-v3');
+    expect((init.body as FormData).get('language')).toBeNull();
+  });
+
+  it('omits the language form field when language is not provided', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ text: 'ok' }) });
+    const provider = new GroqSpeechProvider({
+      apiKey: 'gsk_test',
+      fetch: fetchMock,
+    });
+    await provider.transcribe(Buffer.from('OggS'), {});
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect((init.body as FormData).get('language')).toBeNull();
+  });
+
+  it('ignores translateToEnglish when language is en', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ text: 'ok' }) });
+    const provider = new GroqSpeechProvider({
+      apiKey: 'gsk_test',
+      fetch: fetchMock,
+    });
+    await provider.transcribe(Buffer.from('OggS'), {
+      language: 'en',
+      translateToEnglish: true,
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.groq.com/openai/v1/audio/transcriptions');
+    expect((init.body as FormData).get('model')).toBe(
+      'whisper-large-v3-turbo',
+    );
+  });
 });
