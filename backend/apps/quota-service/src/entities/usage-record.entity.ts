@@ -41,6 +41,12 @@ export class UsageRecord {
   @Column({ name: 'estimated_cost_micros', type: 'int' })
   estimatedCostMicros: number;
 
+  @Column({ type: 'varchar', nullable: true })
+  language: 'en' | 'vi' | null;
+
+  @Column({ name: 'translate_to_english', type: 'boolean', default: false })
+  translateToEnglish: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

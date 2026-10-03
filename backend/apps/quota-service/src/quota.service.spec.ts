@@ -163,4 +163,25 @@ describe('QuotaService check and commit', () => {
       service.check('user-1', new Date('2026-09-02T00:00:00Z')).quota.used,
     ).toBe(30);
   });
+
+  it('records language and translateToEnglish on the usage record', async () => {
+    const service = QuotaService.withMemory();
+    service.seedUser('user-1', new Date('2026-09-01T00:00:00Z'), plan, {
+      wordsUsed: 0,
+    });
+    await service.commit(
+      { ...commitBody, language: 'vi', translateToEnglish: true },
+      new Date('2026-09-02T00:00:00Z'),
+    );
+    const record = (
+      service as unknown as {
+        usageRecords: Map<
+          string,
+          { language: string | null; translateToEnglish: boolean }
+        >;
+      }
+    ).usageRecords.get(commitBody.requestId);
+    expect(record?.language).toBe('vi');
+    expect(record?.translateToEnglish).toBe(true);
+  });
 });
