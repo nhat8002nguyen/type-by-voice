@@ -334,10 +334,17 @@ export class DictateService {
    * transcribeAndFinalize sends assembled audio to speech-service, commits quota, and enqueues transcript persistence.
    * Completes or fails the DictationSession based on provider and quota RPC outcomes.
    */
+  /**
+   * transcribeAndFinalize sends assembled audio to speech-service, commits quota, and enqueues transcript persistence.
+   * Completes or fails the DictationSession based on provider and quota RPC outcomes.
+   * Forwards the request's language and translation mode to speech-service and quota-service.
+   */
   private async transcribeAndFinalize(output: {
     requestId: string;
     audio: Uint8Array;
     listInHistory: boolean;
+    language?: 'en' | 'vi';
+    translateToEnglish: boolean;
   }): Promise<ServerTextMessage | undefined> {
     const session = this.#session;
     if (session === undefined) {
@@ -352,7 +359,8 @@ export class DictateService {
           SPEECH_TRANSCRIBE_PATTERN,
           {
             requestId: output.requestId,
-            language: 'en',
+            language: output.language,
+            translateToEnglish: output.translateToEnglish,
             audioBase64: Buffer.from(output.audio).toString('base64'),
           },
         ),
@@ -381,6 +389,8 @@ export class DictateService {
             provider: result.provider,
             providerLatencyMs: result.providerLatencyMs,
             estimatedCostMicros: estimatedCostMicros(audioMs),
+            language: output.language,
+            translateToEnglish: output.translateToEnglish,
           },
         ),
       );
