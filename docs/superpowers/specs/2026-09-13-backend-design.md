@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-13
 **Amended:** 2026-09-14 — public APIs are client-agnostic; sessions carry `platform` / `deviceId`
+**Amended:** 2026-10-03 — Vietnamese in scope; `vi → en` via a single provider call. `en → vi` is out of scope.
 **Status:** Design approved, pending spec review
 **Depends on:** `2026-09-13-dictation-protocol.md`
 
@@ -64,7 +65,7 @@ Same Nest CLI monorepo shape as the skeleton (`apps/*`, `libs/*`, one
 |---|---|---|---|
 | `api` | `virtual-facility` | Public HTTP + WebSocket (port 3000) | Auth, sessions, REST for every official client (account, quota, history, devices), `/v1/dictate`, in-memory Opus buffer |
 | `quota-service` | `alarms-service` | NATS queue `quota-service` | Plans, subscriptions, period counters, usage records. Sole writer of `words_used` |
-| `speech-service` | `alarms-classifier-service` | NATS request/response `speech.transcribe` | Groq adapter. Receives **one** assembled Ogg payload per session, never a live stream |
+| `speech-service` | `alarms-classifier-service` | NATS request/response `speech.transcribe` | Groq adapter. Receives **one** assembled Ogg payload per session, never a live stream. Transcribes or translates to English (see Language and translation) |
 | `workflows-service` | `workflows-service` | RabbitMQ queue `workflows-service`, own Postgres | After-dictate work: persist transcript, side effects. Inbox + manual ack |
 | `notifications-service` | `notifications-service` | RabbitMQ queue `notifications-service` | Verification, password reset, quota emails |
 | *(omit)* | `alarms-generator` | — | Course load generator. Not a production app |
@@ -112,13 +113,14 @@ NATS, RabbitMQ, Redis, Postgres **per stateful service** (course uses separate
    `4401` on failure.
 2. `api` NATS-`send`s a quota check to `quota-service`. If words or the audio
    ceiling are exhausted, close `4403` without accepting audio.
-3. On `start`, validate audio parameters and that `platform` / `deviceId` match
-   the auth session, then send `ready` including the quota snapshot from that
-   check.
+3. On `start`, validate audio parameters and `language` (if present, one of
+   `en` / `vi`), and that `platform` / `deviceId` match the auth session, then
+   send `ready` including the quota snapshot from that check.
 4. Buffer binary frames in `api` memory only. Enforce duration and inter-message
    timeouts from the protocol.
 5. On `stop`, assemble one Ogg Opus payload in `api` and NATS-`send`
-   `speech.transcribe` to `speech-service`. Audio is never written to disk.
+   `speech.transcribe` to `speech-service` carrying `language` and
+   `translateToEnglish`. Audio is never written to disk.
 6. `speech-service` returns text. `api` (or `quota-service` on commit) counts
    words with the one documented rule: trim, then split on whitespace runs.
 7. `api` NATS-`send`s quota commit to `quota-service` (overshoot allowed;
@@ -135,17 +137,45 @@ publish no workflow.
 ```ts
 interface SpeechProvider {
   readonly name: string;
-  transcribe(audio: Buffer, opts: { language: string }): Promise<{
+  transcribe(audio: Buffer, opts: {
+    language?: string;        // ISO 639-1; omit to auto-detect
+    translateToEnglish?: boolean;
+  }): Promise<{
     text: string;
     providerLatencyMs: number;
   }>;
 }
 ```
 
-The Groq implementation posts the Ogg payload to the hosted Whisper endpoint.
-Provider failures map to `provider_unavailable`, which is retryable, and are
-counted as a metric so an outage is visible rather than inferred from user
-complaints.
+The Groq implementation posts the Ogg payload to the hosted Whisper endpoint —
+`/openai/v1/audio/transcriptions` for transcription, `/openai/v1/audio/translations`
+when `translateToEnglish` is set. Provider failures map to
+`provider_unavailable`, which is retryable, and are counted as a metric so an
+outage is visible rather than inferred from user complaints.
+
+### Language and translation
+
+Exactly one provider call per session, never two. The route table:
+
+| Input | Output | Groq endpoint | Model |
+|---|---|---|---|
+| `vi` | `vi` | transcriptions, `language=vi` | `whisper-large-v3-turbo` (or `whisper-large-v3`) |
+| `vi` / auto | `en` | translations | `whisper-large-v3` |
+| `en` | `en` | transcriptions, `language=en` | `whisper-large-v3-turbo` (or `whisper-large-v3`) |
+| `en` | `vi` | — | not supported |
+
+- `translateToEnglish: true` routes to the translations endpoint, which always
+  uses `whisper-large-v3` (the turbo model has no translation support).
+- The translations endpoint takes no source-language hint, so `vi → en` relies
+  on Whisper's auto-detection.
+- Same-language transcription may use `whisper-large-v3-turbo` (cheaper, faster)
+  or `whisper-large-v3` (more accurate). Default is turbo; `whisper-large-v3` is
+  a configuration switch.
+- `en → vi` is dropped: Whisper only translates *to* English, and the other
+  direction would need a second LLM call, which v1 avoids by design.
+- No sanitization / post-processing LLM pass in v1. Whisper already emits
+  punctuation and casing; the `prompt` parameter (≤ 224 tokens) steers style and
+  terminology when needed.
 
 A single provider means a provider outage is a total product outage. A second
 adapter is the cheapest available insurance and should land before any real user
@@ -226,7 +256,8 @@ quota_periods(id, user_id, period_start, period_end, words_used,
 quota_adjustments(id, user_id, quota_period_id, words_delta, reason, created_at)
 usage_records(id, user_id, request_id, session_id, platform, client_version,
               audio_ms, word_count, provider, provider_latency_ms,
-              estimated_cost_micros, created_at)
+              estimated_cost_micros, language, translate_to_english,
+              created_at)
 transcripts(id, user_id, request_id, ciphertext, word_count, audio_ms,
             created_at, deleted_at)
 ```
@@ -243,7 +274,9 @@ enforceable at the storage layer rather than by convention.
 `usage_records` is intentionally granular: any future billing model can be
 computed from history that already exists. `platform` / `client_version` on
 each row is what makes later per-device telemetry possible without parsing
-`user_agent`.
+`user_agent`. `language` records the requested input language (null when the
+client asked for auto-detection) and `translate_to_english` the translation
+mode, so `vi → vi`, `vi → en`, and `en → en` can be attributed separately.
 
 ## Transcript storage and privacy
 
@@ -324,10 +357,11 @@ rule as the dictation path.
 
 Structured JSON logs with a request ID correlating to the client's `requestId`,
 plus `platform` and `deviceId`. Per-stage latency metrics — connection, audio
-received, provider call, total — tagged by `platform` so a latency regression
-can be attributed rather than guessed at. Provider error rate and quota
-rejection rate are both tracked, because a rising quota rejection rate is a
-pricing signal, not just an error.
+received, provider call, total — tagged by `platform` and by language mode
+(`vi → vi`, `vi → en`, `en → en`) so a latency regression can be attributed
+rather than guessed at. Provider error rate and quota rejection rate are both
+tracked, because a rising quota rejection rate is a pricing signal, not just an
+error.
 
 ## Testing
 
@@ -336,7 +370,11 @@ session timeout), quota period resolution across boundaries and long gaps, the
 atomicity of quota commits under concurrency, and word counting.
 
 The provider adapter is tested against recorded fixtures rather than live API
-calls, so tests are deterministic and free.
+calls, so tests are deterministic and free. These cover the language route
+table: `language` forwarded for same-language transcription, the translations
+endpoint (and only `whisper-large-v3`) selected for `translateToEnglish`, an
+omitted `language` leaving the provider to auto-detect, and `en → vi` rejected
+as unsupported.
 
 Protocol and HTTP fixtures are shared with every official client so a contract
 change breaks both sides' test suites.
@@ -348,6 +386,7 @@ the riskiest assumption in the system.
 ## Deferred
 
 Subscription billing and payment provider integration, multi-region deployment,
-a second speech provider, languages beyond English, any transcript
-post-processing, shipping Windows / Android / iOS clients (the API already
-accepts them), and the course `alarms-generator` app (not shipped).
+a second speech provider, languages beyond English and Vietnamese (notably
+`en → vi`, which needs a second LLM call), any transcript post-processing,
+shipping Windows / Android / iOS clients (the API already accepts them), and the
+course `alarms-generator` app (not shipped).

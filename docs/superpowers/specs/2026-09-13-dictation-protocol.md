@@ -2,6 +2,7 @@
 
 **Date:** 2026-09-13
 **Amended:** 2026-09-14 — contract is for every official client (`macos`, `windows`, `ios`, `android`), not Mac-only. Capture may start before `ready`; upload and the listening indicator must not.
+**Amended:** 2026-10-03 — `language` may be omitted to auto-detect, and a new `translateToEnglish` field supports `vi → en` in one provider call. `en → vi` is out of scope (it would require a second, non-speech provider call).
 **Status:** Design approved, pending spec review
 
 The contract between any official client and the backend. Both sides implement
@@ -66,7 +67,8 @@ Opens a session. Must precede any binary frame.
   "container": "ogg",
   "sampleRate": 16000,
   "channels": 1,
-  "language": "en",
+  "language": "vi",
+  "translateToEnglish": false,
   "platform": "macos",
   "clientVersion": "1.0.0+12",
   "deviceId": "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77"
@@ -75,6 +77,18 @@ Opens a session. Must precede any binary frame.
 
 The server validates the audio parameters and rejects unsupported combinations
 with `invalid_request`.
+
+`language` is the input (spoken) language, ISO 639-1. v1 supports `en` and
+`vi`. It may be omitted to let the server auto-detect the language. Omitting it
+trades a little accuracy and latency for not requiring the user to pick a
+language; supplying it skips detection and is faster and more accurate, so a
+client should send it whenever the user has an explicit input-language setting.
+
+`translateToEnglish` is an optional boolean, default `false`. When `true`, the
+server transcribes and translates the audio to English instead of returning the
+input language. It is meaningful for Vietnamese input (`vi → en`); with `en`
+input the output is already English, so the field should be omitted and is
+ignored if present. An unknown `language` value is `invalid_request`.
 
 `platform`, `clientVersion`, and `deviceId` are required. `platform` is one of
 `macos`, `windows`, `ios`, `android`. `clientVersion` is an opaque string the
@@ -145,7 +159,8 @@ The transcription result. Terminal for the session.
 
 `text` is raw provider output with no post-processing. It may be an empty
 string, which means no speech was recognised; the client must insert nothing in
-that case.
+that case. When the session was started with `translateToEnglish: true`, `text`
+is the English translation; otherwise it is in the input language.
 
 `wordCount` is computed by the server and is the only authoritative count. The
 client must never compute or display its own.
