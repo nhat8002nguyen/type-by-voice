@@ -8,6 +8,7 @@ function fail(message: string) {
   return { ok: false as const, code: 'invalid_request' as const, message };
 }
 
+/** validateStart parses a client start message, returning a normalized StartMessage or an invalid_request reason. */
 export function validateStart(
   input: unknown,
 ): { ok: true; value: StartMessage } | { ok: false; code: 'invalid_request'; message: string } {
@@ -27,8 +28,18 @@ export function validateStart(
   if (value.sampleRate !== 16000 || value.channels !== 1) {
     return fail('unsupported audio parameters');
   }
-  if (value.language !== 'en') {
+  if (
+    value.language !== undefined &&
+    value.language !== 'en' &&
+    value.language !== 'vi'
+  ) {
     return fail('unsupported language');
+  }
+  if (
+    value.translateToEnglish !== undefined &&
+    typeof value.translateToEnglish !== 'boolean'
+  ) {
+    return fail('translateToEnglish must be boolean');
   }
   if (!PLATFORMS.includes(value.platform as Platform)) {
     return fail('unknown platform');
@@ -51,7 +62,8 @@ export function validateStart(
       container: 'ogg',
       sampleRate: 16000,
       channels: 1,
-      language: 'en',
+      language: value.language as 'en' | 'vi' | undefined,
+      translateToEnglish: value.translateToEnglish === true,
       platform: value.platform as Platform,
       clientVersion: value.clientVersion,
       deviceId: value.deviceId,

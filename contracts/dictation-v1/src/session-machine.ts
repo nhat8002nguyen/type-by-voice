@@ -24,7 +24,14 @@ export type SessionEvent =
 export type SessionOutput =
   | { kind: 'send'; message: ReadyMessage | FinalMessage | ErrorMessage }
   | { kind: 'close'; code: number; reason: string }
-  | { kind: 'transcribe'; requestId: string; audio: Uint8Array; listInHistory: boolean };
+  | {
+      kind: 'transcribe';
+      requestId: string;
+      audio: Uint8Array;
+      listInHistory: boolean;
+      language?: 'en' | 'vi';
+      translateToEnglish: boolean;
+    };
 
 export interface SessionIdentity {
   userId: string;
@@ -97,6 +104,8 @@ export class DictationSession {
   #status: SessionStatus = 'open';
   #requestId: string | undefined;
   #listInHistory: boolean | undefined;
+  #language: 'en' | 'vi' | undefined;
+  #translateToEnglish = false;
   #audioChunks: Uint8Array[] = [];
   #readyAtMs: number | undefined;
   #lastAudioAtMs: number | undefined;
@@ -225,6 +234,7 @@ export class DictationSession {
     }
   }
 
+  /** handleStart validates a start message, captures its language and translation mode, and emits ready. */
   private handleStart(data: unknown): SessionOutput[] {
     if (this.#status === 'ready' || this.#status === 'stopping') {
       return this.error('invalid_request', requestIdOf(data, this.#requestId));
@@ -245,6 +255,8 @@ export class DictationSession {
     }
     this.#requestId = start.requestId;
     this.#listInHistory = start.listInHistory;
+    this.#language = start.language;
+    this.#translateToEnglish = start.translateToEnglish ?? false;
     this.#audioChunks = [];
     this.#readyAtMs = this.#nowMs();
     this.#lastAudioAtMs = undefined;
@@ -258,6 +270,7 @@ export class DictationSession {
     return [{ kind: 'send', message }];
   }
 
+  /** handleStop assembles buffered audio and emits a transcribe output carrying the session's language mode. */
   private handleStop(data: Record<string, unknown>): SessionOutput[] {
     if (this.#status === 'closed' || this.#status === 'stopping') {
       return [];
@@ -282,6 +295,8 @@ export class DictationSession {
         requestId: this.#requestId,
         audio,
         listInHistory: this.#listInHistory,
+        language: this.#language,
+        translateToEnglish: this.#translateToEnglish,
       },
     ];
   }

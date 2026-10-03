@@ -14,7 +14,8 @@ export interface StartMessage {
   container: 'ogg';
   sampleRate: 16000;
   channels: 1;
-  language: 'en';
+  language?: 'en' | 'vi';
+  translateToEnglish?: boolean;
   platform: Platform;
   clientVersion: string;
   deviceId: string;
