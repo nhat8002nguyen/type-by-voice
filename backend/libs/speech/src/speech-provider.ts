@@ -3,7 +3,7 @@ export interface SpeechProvider {
   readonly model?: string;
   transcribe(
     audio: Buffer,
-    opts: { language: string },
+    opts: { language?: string; translateToEnglish?: boolean },
   ): Promise<{
     text: string;
     providerLatencyMs: number;
