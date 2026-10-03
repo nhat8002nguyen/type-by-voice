@@ -104,7 +104,7 @@
               }
             },
             "url": "{{baseUrl}}/v1/auth/register",
-            "description": "Creates a user and issues tokens. 201 `{ accessToken, refreshToken, expiresIn }`.\n\n`platform` must be `macos` | `windows` | `ios` | `android`. `deviceId` must be UUID v4.\nUnknown identity → 400 `{ \"code\": \"invalid_request\" }`. Duplicate email → 409."
+            "description": "Creates a user and issues tokens. 201 `{ accessToken, refreshToken, expiresIn }`.\n\n`platform` must be `macos` | `windows` | `ios` | `android` | `linux`. `deviceId` must be UUID v4.\nUnknown identity → 400 `{ \"code\": \"invalid_request\" }`. Duplicate email → 409."
           },
           "event": [
             {
@@ -563,12 +563,32 @@
               }
             }
           ]
+        },
+        {
+          "name": "Delete all transcripts",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/v1/transcripts",
+            "description": "204. Soft-deletes every transcript owned by the caller; they disappear from list/search/export."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "Dictation",
-      "description": "WebSocket `{{wsUrl}}`. Upgrade uses `Authorization: Bearer {{accessToken}}`.\n\nClose codes: 4401 unauthenticated, 4403 quota exhausted, 4429 rate limited.\n\nAfter connect, send the **start** JSON text frame, wait for `ready`, then binary Ogg Opus. Postman is a poor fit for streaming audio — use `contracts/dictation-v1` (`DICTATE_TOKEN=<accessToken> npm run harness`) for a live session.\n\n`platform`, `clientVersion`, and `deviceId` on `start` must match the auth session.",
+      "description": "WebSocket `{{wsUrl}}`. Upgrade uses `Authorization: Bearer {{accessToken}}`.\n\nClose codes: 4401 unauthenticated, 4403 quota exhausted, 4429 rate limited.\n\nAfter connect, send the **start** JSON text frame, wait for `ready`, then binary Ogg Opus. Postman is a poor fit for streaming audio — use `contracts/dictation-v1` (`DICTATE_TOKEN=<accessToken> npm run harness`) for a live session.\n\n`start.language` is the input language (`en` | `vi`); omit it to auto-detect. `start.translateToEnglish: true` returns English text (`vi → en`) in a single Groq call. `platform`, `clientVersion`, and `deviceId` on `start` must match the auth session. The upgrade is limited to 60/min/IP.",
       "item": [
         {
           "name": "Dictate session",
@@ -586,7 +606,7 @@
               "name": "start",
               "type": "text",
               "language": "json",
-              "payload": "{\n  \"type\": \"start\",\n  \"requestId\": \"{{requestId}}\",\n  \"codec\": \"opus\",\n  \"container\": \"ogg\",\n  \"sampleRate\": 16000,\n  \"channels\": 1,\n  \"language\": \"en\",\n  \"platform\": \"{{platform}}\",\n  \"clientVersion\": \"{{clientVersion}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+              "payload": "{\n  \"type\": \"start\",\n  \"requestId\": \"{{requestId}}\",\n  \"codec\": \"opus\",\n  \"container\": \"ogg\",\n  \"sampleRate\": 16000,\n  \"channels\": 1,\n  \"language\": \"vi\",\n  \"translateToEnglish\": false,\n  \"platform\": \"{{platform}}\",\n  \"clientVersion\": \"{{clientVersion}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
             },
             {
               "name": "stop",
