@@ -189,8 +189,6 @@ describe('GroqSpeechProvider', () => {
     });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.groq.com/openai/v1/audio/transcriptions');
-    expect((init.body as FormData).get('model')).toBe(
-      'whisper-large-v3-turbo',
-    );
+    expect((init.body as FormData).get('model')).toBe('whisper-large-v3-turbo');
   });
 });

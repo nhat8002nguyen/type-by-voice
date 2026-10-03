@@ -94,7 +94,10 @@ describe('DictateService', () => {
       send: vi.fn((pattern: string) =>
         of(
           pattern === QUOTA_CHECK_PATTERN
-            ? { allowed: true, quota: loadFixture<ReadyMessage>('ready.json').quota }
+            ? {
+                allowed: true,
+                quota: loadFixture<ReadyMessage>('ready.json').quota,
+              }
             : { quota: loadFixture<ReadyMessage>('ready.json').quota },
         ),
       ),
@@ -137,7 +140,10 @@ describe('DictateService', () => {
       send: vi.fn((pattern: string) =>
         of(
           pattern === QUOTA_CHECK_PATTERN
-            ? { allowed: true, quota: loadFixture<ReadyMessage>('ready.json').quota }
+            ? {
+                allowed: true,
+                quota: loadFixture<ReadyMessage>('ready.json').quota,
+              }
             : { quota: loadFixture<ReadyMessage>('ready.json').quota },
         ),
       ),

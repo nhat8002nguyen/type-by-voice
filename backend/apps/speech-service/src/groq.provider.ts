@@ -85,7 +85,8 @@ export class GroqSpeechProvider implements SpeechProvider {
     audio: Buffer,
     opts: { language?: string; translateToEnglish?: boolean },
   ): Promise<{ text: string; providerLatencyMs: number }> {
-    const translate = opts.translateToEnglish === true && opts.language !== 'en';
+    const translate =
+      opts.translateToEnglish === true && opts.language !== 'en';
     const url = translate ? GROQ_TRANSLATIONS_URL : GROQ_TRANSCRIPTIONS_URL;
     const body = new FormData();
     body.append('model', translate ? TRANSLATION_MODEL : this.model);

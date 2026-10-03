@@ -35,7 +35,11 @@ import {
 } from '@type-by-voice/dictation-v1';
 import { firstValueFrom } from 'rxjs';
 import { SessionRegistry } from './session-registry.js';
-import { DictateMetrics, languageModeOf, type LanguageMode } from '../metrics/dictate-metrics.js';
+import {
+  DictateMetrics,
+  languageModeOf,
+  type LanguageMode,
+} from '../metrics/dictate-metrics.js';
 
 const BYTES_PER_MS = 3;
 const COST_MICROS_PER_HOUR = 40_000;
