@@ -35,7 +35,7 @@ import {
 } from '@type-by-voice/dictation-v1';
 import { firstValueFrom } from 'rxjs';
 import { SessionRegistry } from './session-registry.js';
-import { DictateMetrics } from '../metrics/dictate-metrics.js';
+import { DictateMetrics, languageModeOf, type LanguageMode } from '../metrics/dictate-metrics.js';
 
 const BYTES_PER_MS = 3;
 const COST_MICROS_PER_HOUR = 40_000;
@@ -86,6 +86,7 @@ export class DictateService {
   #pendingClose: DictateClose | undefined;
   #audioReceivedAtMs: number | undefined;
   #providerMs = 0;
+  #languageMode: LanguageMode = 'auto';
 
   constructor(
     quota: QuotaClient,
@@ -128,6 +129,11 @@ export class DictateService {
   /** providerMs returns the last speech-provider round-trip duration in milliseconds. */
   get providerMs(): number {
     return this.#providerMs;
+  }
+
+  /** languageMode returns the latency-tagging mode (for example "vi-en") of this session. */
+  get languageMode(): LanguageMode {
+    return this.#languageMode;
   }
 
   /** isBusy reports whether the session is waiting on transcription after stop. */
@@ -346,6 +352,10 @@ export class DictateService {
     language?: 'en' | 'vi';
     translateToEnglish: boolean;
   }): Promise<ServerTextMessage | undefined> {
+    this.#languageMode = languageModeOf(
+      output.language,
+      output.translateToEnglish,
+    );
     const session = this.#session;
     if (session === undefined) {
       return undefined;

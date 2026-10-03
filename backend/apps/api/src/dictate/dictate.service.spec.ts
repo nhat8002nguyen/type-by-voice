@@ -132,6 +132,42 @@ describe('DictateService', () => {
     );
   });
 
+  it('exposes the language mode of the completed session', async () => {
+    const quota = {
+      send: vi.fn((pattern: string) =>
+        of(
+          pattern === QUOTA_CHECK_PATTERN
+            ? { allowed: true, quota: loadFixture<ReadyMessage>('ready.json').quota }
+            : { quota: loadFixture<ReadyMessage>('ready.json').quota },
+        ),
+      ),
+    };
+    const speech = {
+      send: vi.fn().mockReturnValue(
+        of({
+          text: 'the transcribed text',
+          provider: 'groq-whisper',
+          providerLatencyMs: 20,
+        }),
+      ),
+    };
+    const service = new DictateService(
+      quota as never,
+      speech as never,
+      outboxStub(),
+      jwtUser(),
+    );
+    const start = {
+      ...loadFixture<StartMessage>('start.valid.json'),
+      language: 'vi',
+      translateToEnglish: true,
+    };
+    await service.onText(start);
+    await service.onBinary(Buffer.from('OggS'));
+    await service.onText(loadFixture('stop.valid.json'));
+    expect(service.languageMode).toBe('vi-en');
+  });
+
   it('enqueues workflows.create with listInHistory from start', async () => {
     const quota = {
       send: vi.fn((pattern: string) =>

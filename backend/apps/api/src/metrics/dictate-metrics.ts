@@ -1,8 +1,11 @@
 import type { Platform } from '@type-by-voice/dictation-v1';
 import { Injectable } from '@nestjs/common';
 
+export type LanguageMode = 'en-en' | 'vi-vi' | 'vi-en' | 'auto-en' | 'auto';
+
 export type StageTimings = {
   platform: Platform;
+  mode: LanguageMode;
   connectMs: number;
   audioReceivedMs: number;
   providerMs: number;
@@ -29,12 +32,13 @@ export class DictateMetrics {
   #providerErrors = 0;
   #quotaRejected = 0;
 
-  /** record accumulates per-platform stage timings for one completed dictation. */
+  /** record accumulates stage timings for one completed dictation, bucketed by platform and language mode. */
   record(timings: StageTimings): void {
-    add(this.#connect, timings.platform, timings.connectMs);
-    add(this.#audioReceived, timings.platform, timings.audioReceivedMs);
-    add(this.#provider, timings.platform, timings.providerMs);
-    add(this.#total, timings.platform, timings.totalMs);
+    const key = `${timings.platform}:${timings.mode}`;
+    add(this.#connect, key, timings.connectMs);
+    add(this.#audioReceived, key, timings.audioReceivedMs);
+    add(this.#provider, key, timings.providerMs);
+    add(this.#total, key, timings.totalMs);
   }
 
   /** recordProviderError increments the speech-provider failure counter. */
@@ -65,12 +69,23 @@ function emptyStage(): StageSnapshot {
   return {};
 }
 
-/** add increments count and sumMs for a platform bucket in a stage snapshot. */
-function add(stage: StageSnapshot, platform: string, ms: number): void {
-  const current = stage[platform] ?? { count: 0, sumMs: 0 };
+/** add increments count and sumMs for a bucket key in a stage snapshot. */
+function add(stage: StageSnapshot, key: string, ms: number): void {
+  const current = stage[key] ?? { count: 0, sumMs: 0 };
   current.count += 1;
   current.sumMs += ms;
-  stage[platform] = current;
+  stage[key] = current;
+}
+
+/** languageModeOf maps the input language and translation flag onto a latency-tagging mode. */
+export function languageModeOf(
+  language?: 'en' | 'vi',
+  translateToEnglish?: boolean,
+): LanguageMode {
+  if (language === 'en') return 'en-en';
+  if (translateToEnglish) return language === 'vi' ? 'vi-en' : 'auto-en';
+  if (language === 'vi') return 'vi-vi';
+  return 'auto';
 }
 
 /** cloneStage deep-copies a stage snapshot so callers cannot mutate internals. */
