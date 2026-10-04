@@ -56,6 +56,14 @@ if docker compose up -d --no-deps nginx \
   && docker compose exec -T nginx nginx -s reload; then
   echo "Certificate issued for ${DOMAIN}. TLS config restored from ${TLS_TEMPLATE}."
 else
-  echo "Certificate issued for ${DOMAIN}. TLS template written to ${TLS_CONF}."
-  echo "Start the full stack (./scripts/deploy.sh), then: docker compose exec nginx nginx -s reload"
+  {
+    echo "Certificate issued for ${DOMAIN}. TLS template written to ${TLS_CONF}."
+    echo "nginx was NOT reloaded, so it is still serving the ACME bootstrap config"
+    echo "(port 80 only, 'return 503' for every path) until a reload succeeds."
+    echo "That is expected before the app stack exists: this TLS config declares"
+    echo "'upstream tbv_api { server api:3000; }' and nginx resolves upstream"
+    echo "hostnames at load time, so 'nginx -t' fails until 'api' is on the network."
+    echo "Finish with: ./scripts/deploy.sh    (it reloads nginx at the end)"
+  } >&2
+  exit 1
 fi

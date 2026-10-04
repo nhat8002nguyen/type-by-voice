@@ -33,3 +33,14 @@ else
   echo "api health check failed after retries" >&2
   exit 1
 fi
+
+# Reload nginx so it picks up config and cert changes that landed while the stack
+# was down. This specifically applies the TLS config init-letsencrypt.sh writes:
+# that config declares `upstream tbv_api`, so nginx can only validate and load it
+# once the api container is on the network — which is now.
+if docker compose exec -T nginx nginx -t && docker compose exec -T nginx nginx -s reload; then
+  echo "nginx reloaded"
+else
+  echo "nginx reload failed — TLS config may not be applied" >&2
+  exit 1
+fi

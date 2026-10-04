@@ -74,7 +74,7 @@ What the script does:
 1. Writes an ACME-only HTTP site config (no `api` upstream) so nginx can start without the app stack.
 2. `docker compose up -d --no-deps nginx`, then `certbot certonly` (HTTP-01 webroot).
 3. Marks certs ready, copies `nginx/conf.d/tbv-api.tls.conf.example` → `tbv-api.conf`.
-4. Reloads nginx if possible; if `api` is not on the network yet, finish with `./scripts/deploy.sh` then `docker compose exec nginx nginx -s reload`.
+4. Reloads nginx if the TLS config validates. On a first boot it cannot yet: the config declares `upstream tbv_api { server api:3000; }`, and nginx resolves upstream hostnames at load time, so `nginx -t` fails until the app stack is on the network. The script then exits **non-zero** with an explanation, and nginx keeps serving the ACME bootstrap config — port 80 only, `503` for every path, no HTTPS. `./scripts/deploy.sh` reloads nginx at the end and clears this.
 
 Keep `tbv-api.tls.conf.example` in git as the source of truth for HTTPS.
 
