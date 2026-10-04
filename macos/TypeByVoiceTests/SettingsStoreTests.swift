@@ -30,4 +30,19 @@ final class SettingsStoreTests: XCTestCase {
         ))
         XCTAssertEqual(settings, original)
     }
+
+    func testDictationOptionsPersist() {
+        let suite = "app.typebyvoice.settings.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        var settings = SettingsStore.defaults
+        settings.dictationLanguage = .vietnamese
+        settings.translateToEnglish = true
+        settings.save(defaults: defaults)
+
+        let loaded = SettingsStore.load(defaults: defaults)
+        XCTAssertEqual(loaded.dictationLanguage, .vietnamese)
+        XCTAssertTrue(loaded.translateToEnglish)
+    }
 }

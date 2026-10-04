@@ -3,6 +3,7 @@
 **Date:** 2026-09-13
 **Amended:** 2026-09-14 — this client is one implementation of the shared API (`platform: macos`). Pill is Connecting until mic frames and server `ready`, then Listening.
 **Amended:** 2026-09-28 — Continuity microphone fallback when no usable local input; see `2026-09-28-continuity-microphone-fallback-design.md`.
+**Amended:** 2026-10-04 — Vietnamese dictation and vi→en translation. Language options (English / Vietnamese / Auto-detect) plus a "Translate to English" toggle, sent as `language` / `translateToEnglish` on `start`.
 **Status:** Design approved, pending spec review
 **Depends on:** `2026-09-13-dictation-protocol.md`
 
@@ -29,12 +30,12 @@ siblings directly. This is what makes each piece testable in isolation.
 | `SilenceDetector` | Consumes audio frames, reports speech/silence transitions |
 | `OpusEncoder` | Converts float frames to an Ogg Opus byte stream |
 | `TranscriptionEngine` (protocol) | Streaming session lifecycle, see below |
-| `RemoteTranscriptionEngine` | The only implementation: speaks the dictation protocol, including `platform` / `clientVersion` / `deviceId` on `start` |
+| `RemoteTranscriptionEngine` | The only implementation: speaks the dictation protocol, including `platform` / `clientVersion` / `deviceId` and `language` / `translateToEnglish` on `start` |
 | `TextInserter` | Gets a string into the frontmost application |
 | `OverlayController` | Owns the floating pill window |
 | `PermissionService` | Reports microphone and accessibility status, drives prompts |
 | `AuthStore` | Tokens in Keychain; stable `deviceId` per install; register/login/refresh send `platform`, `clientVersion`, `deviceId` |
-| `Settings` | Hotkey, insertion mode, launch at login, account |
+| `Settings` | Hotkey, dictation language + translate-to-English, insertion mode, launch at login, account |
 
 `TranscriptionEngine` and `TextInserter` are protocols because that is where the
 real-world uncertainty lives: the engine may gain a second implementation, and
@@ -179,6 +180,24 @@ permission (skippable) → choose hotkey → done.
 Every step is re-checkable later from Settings. Launch at login is offered
 through `SMAppService`.
 
+## Dictation language and translation
+
+The client sends `language` and `translateToEnglish` on the `start` message.
+
+| Setting | Values | Wire |
+|---|---|---|
+| Language | English (`en`), Vietnamese (`vi`), Auto-detect | `language` is `"en"` or `"vi"`; Auto-detect omits the field so the backend detects it |
+| Translate to English | On / Off (default Off) | `translateToEnglish` is `true` / `false` |
+
+`translateToEnglish` only applies to Vietnamese or Auto-detect input; the
+backend ignores it for explicit English, so the toggle is disabled while English
+is selected (its stored value is kept, so switching back restores it). With
+Vietnamese + translate on, the inserted transcript is English (vi → en).
+
+The choice lives in Settings and in the menu-bar dashboard so it can be changed
+mid-work; it takes effect on the next dictation. The default is English with
+translation off, matching the client's pre-existing behaviour.
+
 ## Overlay pill
 
 A non-activating `NSPanel` hosting SwiftUI content, positioned near the bottom
@@ -230,6 +249,11 @@ prevent hangs and the ones least likely to be exercised by hand.
 `TranscriptionEngine` has a fake implementation for tests that can produce
 results, empty results, each error code, and silence.
 
+Language/translation is covered by tests asserting the `start` payload maps
+`en` / `vi` / Auto-detect and `translateToEnglish` correctly, that the two
+settings round-trip through `SettingsStore`, and that the coordinator forwards
+the options to the engine.
+
 Integration tests run the real client pipeline against a local mock server built
 from the protocol fixtures shared with the backend, so a protocol change breaks
 both sides' tests rather than only production.
@@ -241,6 +265,7 @@ and without a clipboard manager running.
 ## Deferred
 
 Code signing, notarization, auto-update, App Store distribution, languages
-beyond English, custom vocabulary, any post-processing of transcripts, and a
+beyond English and Vietnamese, custom vocabulary, any post-processing of
+transcripts, and a
 Settings microphone picker / ranked device list (Continuity fallback in
 `2026-09-28-continuity-microphone-fallback-design.md` is automatic only).

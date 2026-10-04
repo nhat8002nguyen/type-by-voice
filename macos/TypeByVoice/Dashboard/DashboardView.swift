@@ -44,6 +44,12 @@ struct DashboardView: View {
                 .padding(4)
             }
 
+            GroupBox("Dictation") {
+                DictationOptionsControl(model: model)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(4)
+            }
+
             HStack {
                 Button("Settings…") {
                     openSettingsWindow()

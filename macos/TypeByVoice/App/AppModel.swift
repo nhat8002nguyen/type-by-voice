@@ -103,6 +103,7 @@ final class AppModel: ObservableObject {
             identity: resolvedAuth.clientIdentity,
             timeouts: timeouts
         )
+        self.coordinator.options = settings.dictationOptions
 
         audioCapture.onSamples = { [weak self] samples in
             self?.coordinator.micFrame(samples: samples)
@@ -187,6 +188,22 @@ final class AppModel: ObservableObject {
         settings.launchAtLogin = enabled
         settings.save()
         applyLaunchAtLogin(enabled)
+    }
+
+    func setDictationLanguage(_ language: DictationLanguage) {
+        settings.dictationLanguage = language
+        settings.save()
+        syncDictationOptions()
+    }
+
+    func setTranslateToEnglish(_ enabled: Bool) {
+        settings.translateToEnglish = enabled
+        settings.save()
+        syncDictationOptions()
+    }
+
+    private func syncDictationOptions() {
+        coordinator.options = settings.dictationOptions
     }
 
     @discardableResult

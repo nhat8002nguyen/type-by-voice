@@ -19,7 +19,8 @@ final class RemoteTranscriptionEngineTests: XCTestCase {
         }
         try await engine.start(
             requestId: UUID(uuidString: "3F2B0C8E-1A2B-4C5D-8E9F-0A1B2C3D4E5F")!,
-            identity: .preview
+            identity: .preview,
+            options: .defaults
         )
         await engine.sendAudio(Data([1, 2, 3]))
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -61,7 +62,7 @@ final class RemoteTranscriptionEngineTests: XCTestCase {
             }
         }
 
-        try await engine.start(requestId: UUID(), identity: .preview)
+        try await engine.start(requestId: UUID(), identity: .preview, options: .defaults)
         await fulfillment(of: [ready1], timeout: 3)
         engine.keepWarm(until: Date().addingTimeInterval(2))
         await engine.stop(durationMs: 500)
@@ -71,7 +72,7 @@ final class RemoteTranscriptionEngineTests: XCTestCase {
         engine.setEventHandler { event in
             if case .ready = event { ready2.fulfill() }
         }
-        try await engine.start(requestId: UUID(), identity: .preview)
+        try await engine.start(requestId: UUID(), identity: .preview, options: .defaults)
         XCTAssertTrue(engine.lastStartReusedWarmSocket)
         await fulfillment(of: [ready2], timeout: 3)
 
@@ -84,7 +85,7 @@ final class RemoteTranscriptionEngineTests: XCTestCase {
         engine.setEventHandler { event in
             if case .ready = event { ready3.fulfill() }
         }
-        try await engine.start(requestId: UUID(), identity: .preview)
+        try await engine.start(requestId: UUID(), identity: .preview, options: .defaults)
         XCTAssertFalse(engine.lastStartReusedWarmSocket)
         await fulfillment(of: [ready3], timeout: 3)
     }
@@ -105,7 +106,7 @@ final class RemoteTranscriptionEngineTests: XCTestCase {
                 streamCount += 1
             }
         }
-        try await engine.start(requestId: UUID(), identity: .preview)
+        try await engine.start(requestId: UUID(), identity: .preview, options: .defaults)
         try await Task.sleep(nanoseconds: 300_000_000)
         streamTask.cancel()
         XCTAssertGreaterThan(handlerCount, 0)

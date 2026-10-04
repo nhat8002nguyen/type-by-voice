@@ -147,6 +147,9 @@ struct SettingsView: View {
                     set: { model.setLaunchAtLogin($0) }
                 ))
             }
+            Section("Dictation") {
+                DictationOptionsControl(model: model)
+            }
             Section("Account") {
                 if model.authStore.accessToken != nil {
                     Text("Signed in")

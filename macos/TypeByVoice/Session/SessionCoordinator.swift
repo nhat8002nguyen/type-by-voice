@@ -10,6 +10,9 @@ final class SessionCoordinator {
 
     var isListeningUI: Bool { state == .recording }
 
+    /// Dictation language and translation settings for the next session.
+    var options: DictationOptions = .defaults
+
     private let engine: TranscriptionEngine
     private let inserter: TextInserter
     private let clock: Clock
@@ -165,10 +168,11 @@ final class SessionCoordinator {
 
         let requestId = UUID()
         let clientIdentity = identity
+        let options = self.options
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await self.engine.start(requestId: requestId, identity: clientIdentity)
+                try await self.engine.start(requestId: requestId, identity: clientIdentity, options: options)
             } catch {
                 self.failToIdle(
                     code: "engine_start_failed",

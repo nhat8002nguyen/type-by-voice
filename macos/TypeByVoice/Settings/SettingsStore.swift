@@ -9,6 +9,8 @@ struct SettingsStore: Equatable, Codable {
     var hardCapMs: Int
     var clipboardRestoreDelayMs: Int
     var launchAtLogin: Bool
+    var dictationLanguage: DictationLanguage
+    var translateToEnglish: Bool
 
     static let defaults = SettingsStore(
         keyCode: UInt32(kVK_ANSI_D),
@@ -16,7 +18,9 @@ struct SettingsStore: Equatable, Codable {
         silenceDurationMs: 3_000,
         hardCapMs: 120_000,
         clipboardRestoreDelayMs: 150,
-        launchAtLogin: false
+        launchAtLogin: false,
+        dictationLanguage: .english,
+        translateToEnglish: false
     )
 
     private static let defaultsKey = "app.typebyvoice.settings"
@@ -46,6 +50,10 @@ struct SettingsStore: Equatable, Codable {
 
     var hotkeyDisplayLabel: String {
         HotkeyFormatter.displayLabel(keyCode: keyCode, modifiers: modifiers)
+    }
+
+    var dictationOptions: DictationOptions {
+        DictationOptions(language: dictationLanguage, translateToEnglish: translateToEnglish)
     }
 
     static func isModifierOnlyKeyCode(_ keyCode: UInt32) -> Bool {

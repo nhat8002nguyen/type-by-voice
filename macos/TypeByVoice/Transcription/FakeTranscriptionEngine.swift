@@ -10,6 +10,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var warmUntil: Date?
     private(set) var lastRequestId: UUID?
     private(set) var lastIdentity: ClientIdentity?
+    private(set) var lastOptions: DictationOptions?
     private(set) var accessToken = ""
     private(set) var isSocketOpen = false
     private(set) var lastStartReusedWarmSocket = false
@@ -32,7 +33,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         accessToken = token
     }
 
-    func start(requestId: UUID, identity: ClientIdentity) async throws {
+    func start(requestId: UUID, identity: ClientIdentity, options: DictationOptions) async throws {
         warmCloseTask?.cancel()
         warmCloseTask = nil
 
@@ -47,6 +48,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         startCallCount += 1
         lastRequestId = requestId
         lastIdentity = identity
+        lastOptions = options
         flushedBytes = 0
     }
 

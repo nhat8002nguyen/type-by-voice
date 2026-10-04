@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 protocol TranscriptionEngine: AnyObject {
-    func start(requestId: UUID, identity: ClientIdentity) async throws
+    func start(requestId: UUID, identity: ClientIdentity, options: DictationOptions) async throws
     func sendAudio(_ data: Data) async
     func stop(durationMs: Int) async
     func cancel() async

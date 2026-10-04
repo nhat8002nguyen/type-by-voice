@@ -40,7 +40,7 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
         eventHandler = handler
     }
 
-    func start(requestId: UUID, identity: ClientIdentity) async throws {
+    func start(requestId: UUID, identity: ClientIdentity, options: DictationOptions) async throws {
         warmCloseTask?.cancel()
         warmCloseTask = nil
 
@@ -62,6 +62,8 @@ final class RemoteTranscriptionEngine: TranscriptionEngine {
 
         let payload = StartPayload(
             requestId: requestId.uuidString.lowercased(),
+            language: options.language.apiValue,
+            translateToEnglish: options.translateToEnglish,
             platform: identity.platform,
             clientVersion: identity.clientVersion,
             deviceId: identity.deviceId.uuidString.lowercased(),
@@ -297,14 +299,15 @@ enum ISO8601Parsing {
     }
 }
 
-private struct StartPayload: Encodable {
+struct StartPayload: Encodable {
     let type = "start"
     let requestId: String
     let codec = "opus"
     let container = "ogg"
     let sampleRate = 16_000
     let channels = 1
-    let language = "en"
+    let language: String?
+    let translateToEnglish: Bool
     let platform: String
     let clientVersion: String
     let deviceId: String

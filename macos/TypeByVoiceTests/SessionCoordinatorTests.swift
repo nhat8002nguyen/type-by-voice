@@ -346,6 +346,18 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertFalse(capture.isCapturing)
     }
 
+    func testOptionsReachEngineOnStart() async {
+        let engine = FakeTranscriptionEngine()
+        let coordinator = SessionCoordinator(engine: engine, inserter: FakeInserter(), clock: Clock())
+        coordinator.options = DictationOptions(language: .vietnamese, translateToEnglish: true)
+        coordinator.hotkeyPressed()
+        await waitUntil { engine.startCallCount >= 1 }
+        XCTAssertEqual(
+            engine.lastOptions,
+            DictationOptions(language: .vietnamese, translateToEnglish: true)
+        )
+    }
+
     private func makeConnecting(engine: FakeTranscriptionEngine) -> SessionCoordinator {
         let coordinator = SessionCoordinator(engine: engine, inserter: FakeInserter(), clock: Clock())
         coordinator.hotkeyPressed()
