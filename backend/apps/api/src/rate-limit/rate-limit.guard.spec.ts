@@ -108,6 +108,43 @@ describe('RateLimitGuard Redis keys', () => {
   });
 });
 
+describe('RateLimitGuard IP buckets', () => {
+  it('keeps each caller in its own bucket instead of one bucket shared by all', async () => {
+    const guard = new RateLimitGuard(
+      undefined,
+      new AuthLimiter({ nowMs: () => 0 }),
+    );
+
+    for (let i = 0; i < 10; i += 1) {
+      await expect(guard.canActivate(ipContext('203.0.113.1'))).resolves.toBe(
+        true,
+      );
+    }
+    await expect(
+      guard.canActivate(ipContext('203.0.113.1')),
+    ).rejects.toThrow('Too Many Requests');
+
+    await expect(guard.canActivate(ipContext('203.0.113.2'))).resolves.toBe(
+      true,
+    );
+  });
+});
+
+function ipContext(realIp: string) {
+  return {
+    switchToHttp: () => ({
+      getRequest: () => ({
+        headers: { 'x-real-ip': realIp },
+        socket: { remoteAddress: '172.18.0.4' },
+        method: 'POST',
+        url: '/v1/auth/register',
+        originalUrl: '/v1/auth/register',
+        body: {},
+      }),
+    }),
+  } as never;
+}
+
 function memoryRedis() {
   const values = new Map<string, string>();
   const ttls = new Map<string, number>();

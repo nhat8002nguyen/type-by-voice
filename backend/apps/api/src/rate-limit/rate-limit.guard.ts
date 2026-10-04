@@ -163,6 +163,7 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
   /** canActivate enforces auth HTTP rate limits (IP, email, lock) before the route handler runs. */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
+      headers?: Record<string, string | string[] | undefined>;
       ip?: string;
       socket?: { remoteAddress?: string };
       url?: string;
@@ -264,12 +265,34 @@ function tooManyRequests(): HttpException {
   return new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
 }
 
-/** clientIp extracts the client IP from an Express-like request or IncomingMessage. */
+/**
+ * clientIp resolves the caller's address from an Express request or a raw WebSocket
+ * upgrade request.
+ *
+ * nginx overwrites X-Real-IP with the address it validated, honouring Cloudflare's
+ * CF-Connecting-IP only when the peer is a Cloudflare edge (see deploy/nginx), so
+ * the header is authoritative whether or not the DNS record is proxied. The later
+ * branches cover requests that never reached nginx, such as unit tests.
+ */
 export function clientIp(request: {
+  headers?: Record<string, string | string[] | undefined>;
   ip?: string;
   socket?: { remoteAddress?: string };
 }): string {
-  return request.ip || request.socket?.remoteAddress || 'unknown';
+  return (
+    firstHeaderValue(request.headers?.['x-real-ip']) ||
+    request.ip ||
+    request.socket?.remoteAddress ||
+    'unknown'
+  );
+}
+
+/** firstHeaderValue returns the trimmed first value of a possibly repeated header. */
+function firstHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
+  const first = Array.isArray(value) ? value[0] : value;
+  return first?.trim() || undefined;
 }
 
 /** isLoginRequest reports whether the request targets the login route for email limiting. */
