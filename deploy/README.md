@@ -5,13 +5,27 @@ Stack: Docker Compose (Nest apps + Postgres/NATS/RabbitMQ/Redis), Nginx TLS term
 
 ## DNS (Cloudflare)
 
-1. Create an **A** record: `tbv-api` → droplet public IPv4.
-2. Proxy status: **DNS only** (grey cloud). HTTP-01 Let's Encrypt fails behind orange-cloud until certificates exist.
-3. Wait until resolution matches the droplet:
+1. Create an **A** record: `tbv-api` → the host's public IPv4.
+2. Choose the proxy status — both work, and they change what the origin can see:
+   - **DNS only** (grey cloud): callers connect straight to the origin, so nginx's
+     `$remote_addr` is the caller. The origin IP is public.
+   - **Proxied** (orange cloud): every request arrives from a Cloudflare edge and the
+     caller is carried in `CF-Connecting-IP`. The origin IP stays hidden, but set SSL/TLS
+     mode to **Full** or **Full (strict)** — Flexible loops against nginx's port-80
+     redirect — and keep `DROPLET_HOST` as the **origin IP**, never the proxied hostname,
+     because Cloudflare's proxy carries only HTTP/HTTPS and SSH to it fails with
+     `dial tcp ***:22: i/o timeout`.
+   Certificate renewals work in either mode: the ACME challenge is served on port 443 as
+   well as 80.
+3. Wait until resolution matches the host:
 
 ```bash
 dig +short tbv-api.nate-ng.com
 ```
+
+Rate limiting keys on the caller's address in both modes. See
+[`docs/rate-limiting-client-ip.md`](../docs/rate-limiting-client-ip.md) for how nginx
+resolves that address, the traps, and how the behaviour is verified.
 
 ## Droplet bootstrap (once)
 

@@ -14,6 +14,7 @@ upstream tbv_api {
 # limits bucket by caller instead of collapsing into a single bucket for the proxy.
 #
 # Refresh the ranges from https://api.cloudflare.com/client/v4/ips.
+# Reasoning and pitfalls: docs/rate-limiting-client-ip.md.
 geo $tbv_peer_is_cloudflare {
   default 0;
   173.245.48.0/20 1;
