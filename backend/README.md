@@ -2,7 +2,7 @@
 
 ## Production
 
-Droplet deploy (Nginx, TLS, Compose, GitHub Actions): see [`../deploy/README.md`](../deploy/README.md).
+Production deploy (Nginx, TLS, Compose, GitHub Actions): see [`../deploy/README.md`](../deploy/README.md).
 
 Nest 12 ESM monorepo. The only public process is `api` on port **3000** (HTTP + WebSocket `/v1/dictate`). Other apps are internal (NATS / RabbitMQ).
 

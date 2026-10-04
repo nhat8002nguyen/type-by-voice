@@ -1,6 +1,6 @@
-# Production deploy (DigitalOcean droplet)
+# Production deploy (single VPS)
 
-Droplet target: **4GB RAM / 2 vCPU**, hostname **`tbv-api.nate-ng.com`**.
+Host: a single VPS — **KVM, Ubuntu 24.04, 4 vCPU / ~4 GB RAM** — serving **`tbv-api.nate-ng.com`**. Its public address is deliberately not recorded here: with the DNS record proxied, that address is exactly what Cloudflare hides.
 Stack: Docker Compose (Nest apps + Postgres/NATS/RabbitMQ/Redis), Nginx TLS termination, Certbot (Let's Encrypt), GitHub Actions → GHCR → SSH redeploy.
 
 ## DNS (Cloudflare)
@@ -27,9 +27,9 @@ Rate limiting keys on the caller's address in both modes. See
 [`docs/rate-limiting-client-ip.md`](../docs/rate-limiting-client-ip.md) for how nginx
 resolves that address, the traps, and how the behaviour is verified.
 
-## Droplet bootstrap (once)
+## Host bootstrap (once)
 
-As root on an Ubuntu droplet:
+As root on the host (Ubuntu 24.04):
 
 ```bash
 apt-get update && apt-get install -y git
@@ -59,9 +59,9 @@ ufw allow 443/tcp
 ufw --force enable
 ```
 
-## GHCR pull auth on droplet
+## GHCR pull auth on the host
 
-Make the five `type-by-voice-*` GHCR packages **public** (recommended for this MVP) so the droplet can pull without a token.
+Make the five `type-by-voice-*` GHCR packages **public** (recommended for this MVP) so the host can pull without a token.
 
 If packages stay private:
 
@@ -120,16 +120,16 @@ Expect Terminus JSON with `"status":"ok"`.
 
 ## GitHub Actions secrets
 
-Create these repository secrets for `.github/workflows/deploy-backend.yml`:
+Create these repository secrets for `.github/workflows/deploy-backend.yml`. The `DROPLET_*` names are historical — they configure the origin host, not a cloud provider:
 
 | Secret | Purpose |
 |---|---|
-| `DROPLET_HOST` | Droplet IPv4 or hostname |
-| `DROPLET_USER` | SSH user (e.g. `root` or `deploy`) |
+| `DROPLET_HOST` | Origin host IPv4 or hostname |
+| `DROPLET_USER` | SSH user (e.g. `root`) |
 | `DROPLET_SSH_KEY` | Private key (PEM) for that user |
 | `DROPLET_SSH_PORT` | Optional; default `22` |
 
-On every push to `main` that touches `backend/`, `contracts/dictation-v1/`, `deploy/`, or the workflow file, Actions builds five images to GHCR (tagged with `github.sha` and `latest`), then SSHs to the droplet, fast-forwards `/opt/type-by-voice`, updates `IMAGE_TAG` / `GHCR_OWNER` in `deploy/.env`, and runs `./scripts/deploy.sh`.
+On every push to `main` that touches `backend/`, `contracts/dictation-v1/`, `deploy/`, or the workflow file, Actions builds five images to GHCR (tagged with `github.sha` and `latest`), then SSHs to the host, fast-forwards `/opt/type-by-voice`, updates `IMAGE_TAG` / `GHCR_OWNER` in `deploy/.env`, and runs `./scripts/deploy.sh`.
 
 `workflow_dispatch` is available for manual redeploy.
 
@@ -138,20 +138,20 @@ On every push to `main` that touches `backend/`, `contracts/dictation-v1/`, `dep
 After the first successful build:
 
 1. GitHub → Packages → each `type-by-voice-*` package → Package settings → Change visibility → Public.
-2. Or keep private and ensure droplet Docker login (above) stays valid.
+2. Or keep private and ensure the host's Docker login (above) stays valid.
 
 ## RAM notes
 
-Expect roughly **1.5–2.5GB** idle with production images. Watch `docker stats` on the droplet. Do **not** enable the RabbitMQ management plugin (prod image is `rabbitmq:3-alpine`). Leave headroom under ~3.2GB total.
+Expect roughly **1.5–2.5GB** idle with production images. Watch `docker stats` on the host. Do **not** enable the RabbitMQ management plugin (prod image is `rabbitmq:3-alpine`). Leave headroom under ~3.2GB total.
 
 ## Verification
 
-1. `dig +short tbv-api.nate-ng.com` → droplet IP
+1. `dig +short tbv-api.nate-ng.com` → the origin IP (what `DROPLET_HOST` holds)
 2. `curl -sS https://tbv-api.nate-ng.com/health` → `"status":"ok"`
 3. Register:
    `curl -sS https://tbv-api.nate-ng.com/v1/auth/register -H 'content-type: application/json' -d '{"email":"you@example.com","password":"a-long-enough-password","platform":"macos","clientVersion":"1.0.0","deviceId":"9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77"}'`
 4. Dictation harness from laptop:
    `DICTATE_URL=wss://tbv-api.nate-ng.com/v1/dictate DICTATE_TOKEN=... npm run harness` in `contracts/dictation-v1`
-5. `docker stats` on droplet — total memory under ~3.2GB with headroom
+5. `docker stats` on the host — total memory under ~3.2GB with headroom
 6. Push a no-op commit to `main` → Actions green → new `IMAGE_TAG` running (`docker compose ps`)
-7. After first successful schema sync, set `TYPEORM_SYNCHRONIZE=false` in droplet `.env` and redeploy
+7. After first successful schema sync, set `TYPEORM_SYNCHRONIZE=false` in the host's `.env` and redeploy
