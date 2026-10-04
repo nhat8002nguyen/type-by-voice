@@ -27,6 +27,14 @@ server {
   ssl_session_cache shared:SSL:10m;
   ssl_protocols TLSv1.2 TLSv1.3;
 
+  # HTTP-01 challenges must resolve over TLS as well. If anything in front forces
+  # HTTPS (Cloudflare's "Always Use HTTPS"), the challenge arrives on 443, and
+  # without this location it would fall through to `location /`, be proxied to the
+  # API, and 404 — silently breaking renewals.
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+
   location / {
     proxy_http_version 1.1;
     proxy_set_header Host $host;
