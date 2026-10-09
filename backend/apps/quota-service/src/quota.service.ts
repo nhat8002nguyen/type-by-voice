@@ -16,7 +16,7 @@ import { UsageRecord } from './entities/usage-record.entity.js';
 export const DEFAULT_FREE_PLAN = {
   name: 'free',
   wordLimit: 2000,
-  periodLengthDays: 7,
+  periodLengthDays: 1,
   audioMinutesCeiling: 180,
   isDefault: true,
 } as const;

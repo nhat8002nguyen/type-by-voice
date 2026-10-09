@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { QuotaService } from './quota.service.js';
 
 const plan = {
-  id: 'plan-free',
+  id: 'plan-test-weekly',
   wordLimit: 2000,
   periodLengthDays: 7,
   audioMinutesCeiling: 180,
@@ -21,6 +21,16 @@ const commitBody: CommitQuotaRequestDto = {
   providerLatencyMs: 300,
   estimatedCostMicros: 10,
 };
+
+describe('QuotaService default free plan', () => {
+  it('grants 2000 words over a one-day period', () => {
+    const service = QuotaService.withMemory();
+    const now = new Date('2026-09-02T00:00:00Z');
+    const { quota } = service.check('user-1', now);
+    expect(quota.limit).toBe(2000);
+    expect(quota.resetAt).toBe('2026-09-03T00:00:00.000Z');
+  });
+});
 
 describe('QuotaService.resolvePeriod', () => {
   it('opens the first period at signup', () => {
