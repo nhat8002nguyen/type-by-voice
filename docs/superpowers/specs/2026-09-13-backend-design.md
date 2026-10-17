@@ -348,7 +348,7 @@ rule as the dictation path.
 | Control | Default |
 |---|---|
 | Max concurrent dictation sessions per user | 2 (server safety limit, not a Mac assumption; raise in config when a second client ships) |
-| Max audio duration per session | 120 s |
+| Max audio duration per session | 300 s |
 | Auth endpoint rate limits | Per IP and per account, with lockout backoff |
 | Audio-minute ceiling per period | Plan-configured, generous |
 | Max request body / frame sizes | Bounded, rejected with `invalid_request` |

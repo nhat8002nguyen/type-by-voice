@@ -30,4 +30,30 @@ final class SettingsStoreTests: XCTestCase {
         ))
         XCTAssertEqual(settings, original)
     }
+
+    func testLoadLiftsLegacyHardCapToCurrentDefault() throws {
+        let suite = "app.typebyvoice.settings.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        var stale = SettingsStore.defaults
+        stale.hardCapMs = SettingsStore.legacyDefaultHardCapMs
+        stale.save(defaults: defaults)
+
+        let loaded = SettingsStore.load(defaults: defaults)
+        XCTAssertEqual(loaded.hardCapMs, SettingsStore.defaults.hardCapMs)
+        XCTAssertEqual(loaded.hardCapMs, 300_000)
+    }
+
+    func testLoadKeepsNonLegacyHardCap() throws {
+        let suite = "app.typebyvoice.settings.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        var custom = SettingsStore.defaults
+        custom.hardCapMs = 60_000
+        custom.save(defaults: defaults)
+
+        XCTAssertEqual(SettingsStore.load(defaults: defaults).hardCapMs, 60_000)
+    }
 }

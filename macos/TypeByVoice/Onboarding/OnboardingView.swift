@@ -49,7 +49,7 @@ struct OnboardingView: View {
             case .accessibility:
                 Text("Accessibility (optional)")
                     .font(.headline)
-                Text("Needed to paste into the frontmost app. You can skip and paste manually.")
+                Text("Needed to paste into the frontmost app. You can skip and paste manually. If paste stops working later, turn Accessibility off and on again for TypeByVoice.")
                     .foregroundStyle(.secondary)
                 HStack {
                     Button("Enable Accessibility") {

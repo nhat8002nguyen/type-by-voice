@@ -52,9 +52,12 @@ final class FakeNotifier: UserNotifying {
 }
 
 final class FakeFocus: InsertionFocusing {
+    private(set) var rememberCount = 0
     private(set) var restoreCount = 0
 
-    func rememberFrontmostApp() {}
+    func rememberFrontmostApp() {
+        rememberCount += 1
+    }
 
     func restoreFrontmostApp() async {
         restoreCount += 1
@@ -85,7 +88,7 @@ final class ClipboardPasteInserterTests: XCTestCase {
         XCTAssertEqual(events.posted.count, 0)
         XCTAssertEqual(
             FakeNotifier.messages.last,
-            "Transcript copied — press ⌘V. Enable Accessibility for auto-paste."
+            "Transcript copied — press ⌘V. If Accessibility is already on, turn it off and on again for TypeByVoice."
         )
     }
 
@@ -104,5 +107,19 @@ final class ClipboardPasteInserterTests: XCTestCase {
         XCTAssertEqual(pasteboard.string, "previous")
         XCTAssertEqual(focus.restoreCount, 1)
         XCTAssertEqual(FakeEventPoster.lastModifiers.contains(.maskCommand), true)
+    }
+
+    func testRememberInsertionTargetForwardsToFocus() {
+        let focus = FakeFocus()
+        let inserter = ClipboardPasteInserter(
+            pasteboard: FakePasteboard(),
+            poster: FakeEventPoster(),
+            notifications: FakeNotifier(),
+            accessibilityGranted: { true },
+            focus: focus,
+            restoreDelayMs: 0
+        )
+        inserter.rememberInsertionTarget()
+        XCTAssertEqual(focus.rememberCount, 1)
     }
 }

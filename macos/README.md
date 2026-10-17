@@ -138,5 +138,5 @@ caret in each target, both with and without a clipboard manager running
 
 For each cell: focus an editable field, dictate a short phrase, verify insert,
 then verify the previous clipboard contents are restored after
-`clipboardRestoreDelayMs` (default 150 ms). Note any app that only keeps the
+`clipboardRestoreDelayMs` (default 500 ms). Note any app that only keeps the
 transcript on the clipboard (fallback path) instead of pasting.

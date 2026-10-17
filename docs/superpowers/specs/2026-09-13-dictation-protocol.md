@@ -131,7 +131,7 @@ buffer immediately, then stream.
 {
   "type": "ready",
   "requestId": "3f2b...",
-  "maxDurationMs": 120000,
+  "maxDurationMs": 300000,
   "quota": { "unit": "words", "limit": 2000, "used": 312, "resetAt": "2026-09-18T04:12:00Z" }
 }
 ```
@@ -217,7 +217,7 @@ retries over a flaky connection safe.
 
 | Limit | Default | Enforced by |
 |---|---|---|
-| Max audio duration per session | 120 s | Both; server authoritative |
+| Max audio duration per session | 300 s | Both; server authoritative |
 | Max time between `start` and first audio | 10 s | Server |
 | Max time the client may stay in Connecting before `ready` + live mic | 5 s | Client; then error, do not look like listening |
 | Max time between last audio and `stop` | 30 s | Server |
