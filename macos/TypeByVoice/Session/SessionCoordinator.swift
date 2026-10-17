@@ -147,6 +147,7 @@ final class SessionCoordinator {
         effectiveRecordingHardCap = timeouts.recordingHardCap
         silenceDetector.reset()
         encoder.reset()
+        inserter.rememberInsertionTarget()
         do {
             try audioCapture.startCapture()
         } catch let error as AudioCaptureStartError {

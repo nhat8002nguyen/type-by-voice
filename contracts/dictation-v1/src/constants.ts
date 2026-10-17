@@ -23,7 +23,7 @@ export const CLOSE_CODES = {
 } as const;
 
 export const SESSION_LIMITS = {
-  maxDurationMs: 120_000,
+  maxDurationMs: 300_000,
   firstAudioTimeoutMs: 10_000,
   stopTimeoutMs: 30_000,
   idleTimeoutMs: 60_000,

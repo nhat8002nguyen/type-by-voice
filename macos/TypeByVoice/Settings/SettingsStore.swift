@@ -14,17 +14,24 @@ struct SettingsStore: Equatable, Codable {
         keyCode: UInt32(kVK_ANSI_D),
         modifiers: UInt32(cmdKey | shiftKey),
         silenceDurationMs: 3_000,
-        hardCapMs: 120_000,
-        clipboardRestoreDelayMs: 150,
+        hardCapMs: 300_000,
+        clipboardRestoreDelayMs: 500,
         launchAtLogin: false
     )
+
+    /// The hard cap has no UI, so a stored value equal to the old 2-minute
+    /// default can only be stale — `load` lifts it to the current default.
+    static let legacyDefaultHardCapMs = 120_000
 
     private static let defaultsKey = "app.typebyvoice.settings"
 
     static func load(defaults: UserDefaults = .standard) -> SettingsStore {
         guard let data = defaults.data(forKey: defaultsKey),
-              let decoded = try? JSONDecoder().decode(SettingsStore.self, from: data) else {
+              var decoded = try? JSONDecoder().decode(SettingsStore.self, from: data) else {
             return .defaults
+        }
+        if decoded.hardCapMs == Self.legacyDefaultHardCapMs {
+            decoded.hardCapMs = Self.defaults.hardCapMs
         }
         return decoded
     }

@@ -24,7 +24,7 @@ describe('dictation v1 constants', () => {
   });
 
   it('uses the spec session limits', () => {
-    expect(SESSION_LIMITS.maxDurationMs).toBe(120_000);
+    expect(SESSION_LIMITS.maxDurationMs).toBe(300_000);
     expect(SESSION_LIMITS.firstAudioTimeoutMs).toBe(10_000);
     expect(SESSION_LIMITS.stopTimeoutMs).toBe(30_000);
     expect(SESSION_LIMITS.idleTimeoutMs).toBe(60_000);

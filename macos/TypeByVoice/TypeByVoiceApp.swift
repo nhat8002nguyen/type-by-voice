@@ -31,16 +31,37 @@ struct TypeByVoiceApp: App {
             }
             .frame(width: 420, height: 440)
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: model.isSessionActive ? "mic.fill" : "mic")
-                Text("TBV")
-            }
+            // Template mark (three bars) — not the full Dock AppIcon chrome.
+            MenuBarAppIcon(isSessionActive: model.isSessionActive)
         }
         .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView(model: model)
         }
+    }
+}
+
+/// Compact template glyph sized like other status items; red dot while dictating.
+private struct MenuBarAppIcon: View {
+    var isSessionActive: Bool
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Image("MenuBarIcon")
+                .renderingMode(.template)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 16, height: 16)
+            if isSessionActive {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 5, height: 5)
+                    .offset(x: 2, y: -2)
+            }
+        }
+        .frame(width: 16, height: 16)
+        .accessibilityLabel(isSessionActive ? "Type by Voice, dictating" : "Type by Voice")
     }
 }
 

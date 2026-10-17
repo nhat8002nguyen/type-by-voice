@@ -5,6 +5,6 @@
   "message": "Audio exceeded maxDurationMs.",
   "retryable": false,
   "details": {
-    "maxDurationMs": 120000
+    "maxDurationMs": 300000
   }
 }

@@ -3,9 +3,14 @@ import XCTest
 
 final class FakeInserter: TextInserter {
     private(set) var inserted: [String] = []
+    private(set) var rememberCount = 0
 
     func insert(_ text: String) async {
         inserted.append(text)
+    }
+
+    func rememberInsertionTarget() {
+        rememberCount += 1
     }
 }
 
@@ -13,10 +18,12 @@ final class FakeInserter: TextInserter {
 final class SessionCoordinatorTests: XCTestCase {
     func testHotkeyEntersConnectingNotRecording() async {
         let engine = FakeTranscriptionEngine()
-        let coordinator = SessionCoordinator(engine: engine, inserter: FakeInserter(), clock: Clock())
+        let inserter = FakeInserter()
+        let coordinator = SessionCoordinator(engine: engine, inserter: inserter, clock: Clock())
         coordinator.hotkeyPressed()
         XCTAssertEqual(coordinator.state, .connecting)
         XCTAssertFalse(coordinator.isListeningUI)
+        XCTAssertEqual(inserter.rememberCount, 1)
     }
 
     func testRecordingRequiresFramesAndReady() async {

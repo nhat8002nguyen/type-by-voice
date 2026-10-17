@@ -42,7 +42,7 @@ final class ClipboardPasteInserter: TextInserter {
         notifications: UserNotifying = SystemUserNotifier(),
         accessibilityGranted: @escaping () -> Bool,
         focus: InsertionFocusing = FrontmostAppFocuser(),
-        restoreDelayMs: Int = 250
+        restoreDelayMs: Int = 500
     ) {
         self.pasteboard = pasteboard
         self.poster = poster
@@ -52,7 +52,15 @@ final class ClipboardPasteInserter: TextInserter {
         self.restoreDelayMs = restoreDelayMs
     }
 
+    func rememberInsertionTarget() {
+        focus.rememberFrontmostApp()
+    }
+
     func insert(_ text: String) async {
+        // Re-assert this running bundle so Accessibility matches the current
+        // signature after rebuilds / moves (stale grants look "on" but paste dies).
+        _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
+
         if accessibilityGranted() {
             lastMode = .paste
             await focus.restoreFrontmostApp()
@@ -68,7 +76,7 @@ final class ClipboardPasteInserter: TextInserter {
             pasteboard.string = text
             promptAccessibilityIfNeeded()
             notifications.notify(
-                body: "Transcript copied — press ⌘V. Enable Accessibility for auto-paste."
+                body: "Transcript copied — press ⌘V. If Accessibility is already on, turn it off and on again for TypeByVoice."
             )
         }
     }
@@ -76,9 +84,6 @@ final class ClipboardPasteInserter: TextInserter {
     private func promptAccessibilityIfNeeded() {
         guard !didPromptAccessibility else { return }
         didPromptAccessibility = true
-        // Re-assert this running bundle before Settings refreshes the Accessibility
-        // list; otherwise a stale same-bundle-id build (often iconless) can win.
-        _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {

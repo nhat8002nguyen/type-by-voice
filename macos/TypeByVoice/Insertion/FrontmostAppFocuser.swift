@@ -44,7 +44,8 @@ final class FrontmostAppFocuser: InsertionFocusing {
             ?? apps.first(where: { $0.bundleIdentifier == targetBundleId && targetBundleId != nil })
         guard let match, !match.isTerminated else { return }
         match.activate(options: [.activateIgnoringOtherApps])
-        try? await Task.sleep(nanoseconds: 100_000_000)
+        // Settle after activation so ⌘V lands in the restored app (macOS focus can lag).
+        try? await Task.sleep(nanoseconds: 150_000_000)
     }
 
     private func noteActivated(_ app: NSRunningApplication) {
