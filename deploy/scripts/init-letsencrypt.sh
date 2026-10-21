@@ -61,8 +61,8 @@ else
     echo "nginx was NOT reloaded, so it is still serving the ACME bootstrap config"
     echo "(port 80 only, 'return 503' for every path) until a reload succeeds."
     echo "That is expected before the app stack exists: this TLS config declares"
-    echo "'upstream tbv_api { server api:3000; }' and nginx resolves upstream"
-    echo "hostnames at load time, so 'nginx -t' fails until 'api' is on the network."
+    echo "'upstream tbv_api { server tbv-api:3000; }' and nginx resolves upstream"
+    echo "hostnames at load time, so 'nginx -t' fails until 'tbv-api' is on the network."
     echo "Finish with: ./scripts/deploy.sh    (it reloads nginx at the end)"
   } >&2
   exit 1

@@ -37,6 +37,12 @@ services:
         limits:
           memory: 512M
     mem_limit: 512m
+    # Unique DNS name. Talot also has a Compose service named `api` on the
+    # shared talot-edge network that nginx joins, so `api` resolves to Talot.
+    networks:
+      default:
+        aliases:
+          - tbv-api
 
   quota-service:
     image: ghcr.io/${GHCR_OWNER}/type-by-voice-quota-service:${IMAGE_TAG}
