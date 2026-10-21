@@ -118,6 +118,13 @@ Expect Terminus JSON with `"status":"ok"`.
 - `TBV_API_URL=https://tbv-api.nate-ng.com`
 - `TBV_DICTATE_URL=wss://tbv-api.nate-ng.com/v1/dictate`
 
+## Sharing the host with another app
+
+The same VPS can serve a second API (Talot) without a second public Nginx.
+TypeByVoice Nginx keeps ports 80/443.
+The other app joins a shared Docker network and adds a second `server_name` file under `nginx/conf.d/`.
+How hostname routing, `talot-edge`, and Docker DNS fit together is in [`docs/shared-nginx-edge.md`](../docs/shared-nginx-edge.md).
+
 ## GitHub Actions secrets
 
 Create these repository secrets for `.github/workflows/deploy-backend.yml`. The `DROPLET_*` names are historical — they configure the origin host, not a cloud provider:
