@@ -7,6 +7,7 @@ struct HistoryView: View {
     @State private var searchText = ""
     @State private var searchTask: Task<Void, Never>?
     @State private var confirmDeleteAll = false
+    @State private var copiedId: String?
 
     init(model: AppModel) {
         self.model = model
@@ -92,34 +93,57 @@ struct HistoryView: View {
 
     private func card(_ item: TranscriptItem) -> some View {
         let expanded = history.expandedId == item.id
-        return Button {
-            history.toggleExpanded(id: item.id)
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(item.text)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(expanded ? nil : 3)
-                    .textSelection(.enabled)
-                Divider()
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Self.dateFormatter.string(from: item.createdAt))
-                    Text(Self.timeFormatter.string(from: item.createdAt))
+        return ZStack(alignment: .bottomTrailing) {
+            Button {
+                history.toggleExpanded(id: item.id)
+            } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(item.text)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(expanded ? nil : 3)
+                        .textSelection(.enabled)
+                    Divider()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Self.dateFormatter.string(from: item.createdAt))
+                        Text(Self.timeFormatter.string(from: item.createdAt))
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.trailing, 36)
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color(nsColor: .separatorColor).opacity(0.6), lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+            Button {
+                history.copy(item.text)
+                copiedId = item.id
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    if copiedId == item.id {
+                        copiedId = nil
+                    }
+                }
+            } label: {
+                Image(systemName: copiedId == item.id ? "checkmark" : "doc.on.doc")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .help("Copy")
+            .padding(.trailing, 10)
+            .padding(.bottom, 10)
         }
-        .buttonStyle(.plain)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.6), lineWidth: 1)
+        )
     }
 
     private var dictationButton: some View {
@@ -164,6 +188,20 @@ struct HistoryView: View {
             }
             .buttonStyle(.bordered)
             .help("Delete all transcriptions")
+            settingsButton
+        }
+    }
+
+    @ViewBuilder
+    private var settingsButton: some View {
+        if #available(macOS 14.0, *) {
+            SettingsLink {
+                Image(systemName: "gearshape")
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.bordered)
+            .help("Settings")
+        } else {
             Button {
                 model.openSettings()
             } label: {

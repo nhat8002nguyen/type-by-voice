@@ -160,12 +160,16 @@ final class AppModel: ObservableObject {
     }
 
     func openSettings() {
-        if #available(macOS 14.0, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
         NSApp.activate(ignoringOtherApps: true)
+        let selector: Selector
+        if #available(macOS 14.0, *) {
+            selector = Selector(("showSettingsWindow:"))
+        } else {
+            selector = Selector(("showPreferencesWindow:"))
+        }
+        if !NSApp.sendAction(selector, to: NSApp, from: nil) {
+            NSApp.sendAction(selector, to: nil, from: nil)
+        }
     }
 
     /// Test hook: feed synthetic mic frames into the session coordinator.

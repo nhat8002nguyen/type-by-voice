@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -13,17 +14,24 @@ final class TranscriptHistoryStore: ObservableObject {
     private let refresh: () async throws -> Void
     var onUnauthenticated: () async -> Void = {}
     private let retryDelayNanoseconds: UInt64
+    private let copyText: (String) -> Void
     private var loadGeneration = 0
     private var optimistic: TranscriptItem?
 
     init(
         client: TranscriptsServing,
         refresh: @escaping () async throws -> Void = {},
-        retryDelayNanoseconds: UInt64 = 500_000_000
+        retryDelayNanoseconds: UInt64 = 500_000_000,
+        copyText: @escaping (String) -> Void = { text in
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+        }
     ) {
         self.client = client
         self.refresh = refresh
         self.retryDelayNanoseconds = retryDelayNanoseconds
+        self.copyText = copyText
     }
 
     func load() async {
@@ -65,6 +73,10 @@ final class TranscriptHistoryStore: ObservableObject {
 
     func toggleExpanded(id: String) {
         expandedId = expandedId == id ? nil : id
+    }
+
+    func copy(_ text: String) {
+        copyText(text)
     }
 
     private func refreshUntilServerHasOptimistic() async {

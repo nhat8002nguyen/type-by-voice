@@ -120,4 +120,15 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         store.toggleExpanded(id: "b")
         XCTAssertNil(store.expandedId)
     }
+
+    func testCopyWritesTranscriptText() {
+        var copied: String?
+        let store = TranscriptHistoryStore(
+            client: FakeTranscriptsClient(),
+            retryDelayNanoseconds: 0,
+            copyText: { copied = $0 }
+        )
+        store.copy("hello from history")
+        XCTAssertEqual(copied, "hello from history")
+    }
 }
