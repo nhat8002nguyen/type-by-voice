@@ -14,22 +14,22 @@ struct TypeByVoiceApp: App {
                 if model.showsWelcome {
                     OnboardingView(model: model)
                 } else {
-                    DashboardView(model: model)
+                    HistoryView(model: model)
                 }
             }
-            .frame(minWidth: 420, minHeight: 440)
+            .frame(minWidth: 420, minHeight: 520)
         }
-        .defaultSize(width: 420, height: 440)
+        .defaultSize(width: 420, height: 620)
 
         MenuBarExtra {
             Group {
                 if model.showsWelcome {
                     OnboardingView(model: model)
                 } else {
-                    DashboardView(model: model)
+                    HistoryView(model: model)
                 }
             }
-            .frame(width: 420, height: 440)
+            .frame(width: 420, height: 620)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: model.isSessionActive ? "mic.fill" : "mic")
