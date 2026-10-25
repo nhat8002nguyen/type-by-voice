@@ -1,12 +1,19 @@
 import Foundation
 
+enum SessionDestination: Equatable {
+    case cursor
+    case history
+}
+
 @MainActor
 final class SessionCoordinator {
     private(set) var state: SessionState = .idle
     private(set) var lastError: SessionError?
     private(set) var lastQuota: QuotaSnapshot?
+    private(set) var destination: SessionDestination = .cursor
     var onStateChange: ((SessionState) -> Void)?
     var onQuotaChange: ((QuotaSnapshot) -> Void)?
+    var onTranscript: ((String) -> Void)?
 
     var isListeningUI: Bool { state == .recording }
 
@@ -59,9 +66,10 @@ final class SessionCoordinator {
         }
     }
 
-    func hotkeyPressed() {
+    func hotkeyPressed(destination: SessionDestination = .cursor) {
         switch state {
         case .idle:
+            self.destination = destination
             beginConnecting()
         case .connecting:
             cancelSession()
@@ -328,11 +336,17 @@ final class SessionCoordinator {
                 transition(to: .idle)
                 return
             }
+            if destination == .history {
+                onTranscript?(trimmed)
+                transition(to: .idle)
+                return
+            }
             insertingStartedAt = clock.now
             transition(to: .inserting)
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 await self.inserter.insert(trimmed)
+                self.onTranscript?(trimmed)
                 if self.state == .inserting {
                     self.transition(to: .idle)
                 }
