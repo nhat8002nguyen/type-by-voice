@@ -10,14 +10,17 @@ final class AppModel: ObservableObject {
     @Published var settings: SettingsStore
     @Published var showOnboarding: Bool
     @Published var isSessionActive = false
+    @Published var sessionState: SessionState = .idle
     @Published var quotaRemainingText: String?
     @Published var needsLogin = false
+    @Published var historyBanner: String?
 
     let authStore: AuthStore
     let permissions: PermissionService
     let overlay: OverlayController
     let hotkey: HotkeyService
     let audioCapture: AudioCaptureService
+    let history: TranscriptHistoryStore
 
     private let engine: TranscriptionEngine
     private let coordinator: SessionCoordinator
@@ -40,7 +43,8 @@ final class AppModel: ObservableObject {
         ),
         engineURL: URL = AppEndpoints.dictateURL(),
         apiBaseURL: URL = AppEndpoints.apiBaseURL(),
-        transcriptionEngine: TranscriptionEngine? = nil
+        transcriptionEngine: TranscriptionEngine? = nil,
+        transcripts: TranscriptsServing? = nil
     ) {
         let runningUnderXCTest =
             ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -74,6 +78,22 @@ final class AppModel: ObservableObject {
         self.audioCapture = audioCapture
         self.showOnboarding = resolvedAuth.accessToken == nil
             || UserDefaults.standard.bool(forKey: "app.typebyvoice.onboardingComplete") == false
+
+        let serving: TranscriptsServing
+        if let transcripts {
+            serving = transcripts
+        } else if runningUnderXCTest {
+            serving = NullTranscriptsClient()
+        } else {
+            serving = TranscriptsClient(
+                transport: URLSessionTranscriptsTransport(baseURL: apiBaseURL),
+                accessToken: { resolvedAuth.accessToken }
+            )
+        }
+        self.history = TranscriptHistoryStore(
+            client: serving,
+            refresh: { try await resolvedAuth.refreshIfNeeded() }
+        )
 
         let inserter = ClipboardPasteInserter(
             accessibilityGranted: { [permissions] in
@@ -115,9 +135,17 @@ final class AppModel: ObservableObject {
         coordinator.onQuotaChange = { [weak self] quota in
             self?.applyQuota(quota)
         }
+        coordinator.onTranscript = { [weak self] text in
+            Task { @MainActor in
+                await self?.history.didReceiveFinal(text)
+            }
+        }
+        history.onUnauthenticated = { [weak self] in
+            await self?.forceReauthenticate()
+        }
 
         overlay.onRetry = { [weak self] in
-            self?.coordinator.hotkeyPressed()
+            self?.coordinator.hotkeyPressed(destination: .cursor)
         }
 
         if !runningUnderXCTest {
@@ -127,8 +155,21 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func startOrStop() {
-        coordinator.hotkeyPressed()
+    func startOrStop(destination: SessionDestination = .cursor) {
+        coordinator.hotkeyPressed(destination: destination)
+    }
+
+    func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        let selector: Selector
+        if #available(macOS 14.0, *) {
+            selector = Selector(("showSettingsWindow:"))
+        } else {
+            selector = Selector(("showPreferencesWindow:"))
+        }
+        if !NSApp.sendAction(selector, to: NSApp, from: nil) {
+            NSApp.sendAction(selector, to: nil, from: nil)
+        }
     }
 
     /// Test hook: feed synthetic mic frames into the session coordinator.
@@ -163,6 +204,7 @@ final class AppModel: ObservableObject {
         clearUnauthenticatedEpisode()
         syncEngineCredentials()
         objectWillChange.send()
+        Task { await history.load() }
     }
 
     func completeOnboarding() {
@@ -170,6 +212,7 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.set(true, forKey: "app.typebyvoice.onboardingComplete")
         showOnboarding = false
         registerHotkey()
+        Task { await history.load() }
     }
 
     func signOut() async {
@@ -239,7 +282,7 @@ final class AppModel: ObservableObject {
                 modifiers: settings.modifiers
             ) { [weak self] in
                 Task { @MainActor in
-                    self?.coordinator.hotkeyPressed()
+                    self?.coordinator.hotkeyPressed(destination: .cursor)
                 }
             }
         } catch {
@@ -295,8 +338,14 @@ final class AppModel: ObservableObject {
     }
 
     private func handleStateChange(_ state: SessionState) {
+        sessionState = state
         isSessionActive = state != .idle
         updateTickLoop(for: state)
+        if coordinator.destination == .history {
+            handleHistoryStateChange(state)
+            return
+        }
+        historyBanner = nil
         switch state {
         case .recording:
             // Successful connect ends the auth-failure episode so a later
@@ -335,6 +384,34 @@ final class AppModel: ObservableObject {
         refreshOverlay()
     }
 
+    private func handleHistoryStateChange(_ state: SessionState) {
+        switch state {
+        case .recording:
+            clearUnauthenticatedEpisode()
+            if recordingStartedAt == nil {
+                recordingStartedAt = Date()
+            }
+            historyBanner = nil
+        case .idle:
+            recordingStartedAt = nil
+            if let error = coordinator.lastError {
+                if error.code == "engine_start_failed" || error.code == "offline" {
+                    historyBanner = "Dictation unavailable"
+                } else {
+                    historyBanner = error.message
+                }
+                if error.code == "unauthenticated" {
+                    Task { await handleUnauthenticated() }
+                }
+            } else {
+                historyBanner = nil
+            }
+        default:
+            historyBanner = nil
+        }
+        overlay.render(.idle, level: 0, elapsed: 0, quota: nil, error: nil)
+    }
+
     private func updateTickLoop(for state: SessionState) {
         if state == .idle {
             tickTask?.cancel()
@@ -346,13 +423,17 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshOverlay() {
+        updateQuotaText()
+        if coordinator.destination == .history {
+            overlay.render(.idle, level: 0, elapsed: 0, quota: nil, error: nil)
+            return
+        }
         let elapsed: TimeInterval
         if let recordingStartedAt {
             elapsed = Date().timeIntervalSince(recordingStartedAt)
         } else {
             elapsed = 0
         }
-        updateQuotaText()
         overlay.render(
             coordinator.state,
             level: audioCapture.lastLevel,

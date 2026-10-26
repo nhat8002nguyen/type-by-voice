@@ -1,6 +1,11 @@
 import AppKit
 import SwiftUI
 
+/// How far the menu bar mark is dimmed while no dictation session is running.
+/// The overlay pill is what says "recording"; idle is dimmed rather than swapped
+/// for a second asset so only one template image has to be kept.
+private let menuBarIdleOpacity = 0.55
+
 @main
 struct TypeByVoiceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -14,27 +19,26 @@ struct TypeByVoiceApp: App {
                 if model.showsWelcome {
                     OnboardingView(model: model)
                 } else {
-                    DashboardView(model: model)
+                    HistoryView(model: model)
                 }
             }
-            .frame(minWidth: 420, minHeight: 440)
+            .frame(minWidth: 420, minHeight: 520)
         }
-        .defaultSize(width: 420, height: 440)
+        .defaultSize(width: 420, height: 620)
 
         MenuBarExtra {
             Group {
                 if model.showsWelcome {
                     OnboardingView(model: model)
                 } else {
-                    DashboardView(model: model)
+                    HistoryView(model: model)
                 }
             }
-            .frame(width: 420, height: 440)
+            .frame(width: 420, height: 620)
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: model.isSessionActive ? "mic.fill" : "mic")
-                Text("TBV")
-            }
+            Image("MenuBarIcon")
+                .opacity(model.isSessionActive ? 1 : menuBarIdleOpacity)
+                .accessibilityLabel("Type by Voice")
         }
         .menuBarExtraStyle(.window)
 

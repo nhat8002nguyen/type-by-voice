@@ -10,6 +10,30 @@ final class FakeInserter: TextInserter {
 }
 
 @MainActor
+final class GatedInserter: TextInserter {
+    private(set) var inserted: [String] = []
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    func insert(_ text: String) async {
+        await withCheckedContinuation { continuation in
+            if released {
+                continuation.resume()
+            } else {
+                self.continuation = continuation
+            }
+        }
+        inserted.append(text)
+    }
+
+    func release() {
+        released = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
 final class SessionCoordinatorTests: XCTestCase {
     func testHotkeyEntersConnectingNotRecording() async {
         let engine = FakeTranscriptionEngine()
@@ -326,6 +350,72 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.lastError?.retryable, true)
     }
 
+    func testHistoryDestinationSkipsInsertAndNotifies() async {
+        let inserter = FakeInserter()
+        let engine = FakeTranscriptionEngine()
+        var transcripts: [String] = []
+        let coordinator = makeRecording(engine: engine, inserter: inserter, destination: .history)
+        coordinator.onTranscript = { transcripts.append($0) }
+        coordinator.hotkeyPressed()
+        engine.emitFinal(text: "list only")
+        await waitUntil { coordinator.state == .idle }
+        XCTAssertEqual(inserter.inserted, [])
+        XCTAssertEqual(transcripts, ["list only"])
+        XCTAssertEqual(coordinator.state, .idle)
+        XCTAssertEqual(coordinator.destination, .history)
+    }
+
+    func testCursorDestinationStillInsertsAndNotifies() async {
+        let inserter = FakeInserter()
+        let engine = FakeTranscriptionEngine()
+        var transcripts: [String] = []
+        let coordinator = makeRecording(engine: engine, inserter: inserter, destination: .cursor)
+        coordinator.onTranscript = { transcripts.append($0) }
+        coordinator.hotkeyPressed()
+        engine.emitFinal(text: "paste me")
+        await waitUntil { !inserter.inserted.isEmpty && coordinator.state == .idle }
+        XCTAssertEqual(inserter.inserted, ["paste me"])
+        XCTAssertEqual(transcripts, ["paste me"])
+    }
+
+    func testCursorNotifiesHistoryBeforeInsertCompletes() async {
+        let inserter = GatedInserter()
+        let engine = FakeTranscriptionEngine()
+        var transcripts: [String] = []
+        let coordinator = makeRecording(engine: engine, inserter: inserter, destination: .cursor)
+        coordinator.onTranscript = { transcripts.append($0) }
+        coordinator.hotkeyPressed()
+        engine.emitFinal(text: "paste me")
+        await waitUntil { !transcripts.isEmpty }
+        XCTAssertEqual(transcripts, ["paste me"])
+        XCTAssertEqual(inserter.inserted, [])
+        inserter.release()
+        await waitUntil { coordinator.state == .idle }
+        XCTAssertEqual(inserter.inserted, ["paste me"])
+    }
+
+    func testEmptyFinalDoesNotNotifyHistory() async {
+        let inserter = FakeInserter()
+        let engine = FakeTranscriptionEngine()
+        var transcripts: [String] = []
+        let coordinator = makeRecording(engine: engine, inserter: inserter, destination: .history)
+        coordinator.onTranscript = { transcripts.append($0) }
+        coordinator.hotkeyPressed()
+        engine.emitFinal(text: "   ")
+        XCTAssertEqual(inserter.inserted, [])
+        XCTAssertEqual(transcripts, [])
+        XCTAssertEqual(coordinator.state, .idle)
+    }
+
+    func testStopDoesNotChangeDestination() async {
+        let engine = FakeTranscriptionEngine()
+        let coordinator = makeRecording(engine: engine, destination: .history)
+        XCTAssertEqual(coordinator.destination, .history)
+        coordinator.hotkeyPressed(destination: .cursor)
+        XCTAssertEqual(coordinator.state, .transcribing)
+        XCTAssertEqual(coordinator.destination, .history)
+    }
+
     func testStartCaptureFailureReturnsNoInputDevice() {
         let capture = FakeAudioCapture()
         capture.startError = AudioCaptureStartError.noInputDevice
@@ -370,7 +460,8 @@ final class SessionCoordinatorTests: XCTestCase {
         inserter: TextInserter = FakeInserter(),
         clock: Clock = Clock(now: Date(timeIntervalSince1970: 0)),
         timeouts: SessionTimeouts = SessionTimeouts(),
-        advanceRecordingMs: Int = 500
+        advanceRecordingMs: Int = 500,
+        destination: SessionDestination = .cursor
     ) -> SessionCoordinator {
         let coordinator = SessionCoordinator(
             engine: engine,
@@ -378,7 +469,7 @@ final class SessionCoordinatorTests: XCTestCase {
             clock: clock,
             timeouts: timeouts
         )
-        coordinator.hotkeyPressed()
+        coordinator.hotkeyPressed(destination: destination)
         coordinator.micFrame(samples: [0.1, 0.1])
         engine.emitReady()
         XCTAssertEqual(coordinator.state, .recording)
