@@ -58,16 +58,26 @@ final class TranscriptHistoryStore: ObservableObject {
 
     func didReceiveFinal(_ text: String) async {
         searchQuery = ""
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if items.contains(where: { Self.normalizedText($0.text) == trimmed }) {
+            if optimistic != nil {
+                await refreshUntilServerHasOptimistic()
+            } else {
+                await fetch(q: nil, droppingOptimisticIfMissing: false)
+            }
+            return
+        }
         let placeholder = TranscriptItem(
             id: UUID().uuidString,
-            text: text,
-            wordCount: text.split { $0.isWhitespace || $0.isNewline }.count,
+            text: trimmed,
+            wordCount: trimmed.split { $0.isWhitespace || $0.isNewline }.count,
             audioMs: 0,
             createdAt: Date(),
             isOptimistic: true
         )
         optimistic = placeholder
-        items.insert(placeholder, at: 0)
+        items = uniquedByText([placeholder] + items)
         await refreshUntilServerHasOptimistic()
     }
 
@@ -109,20 +119,34 @@ final class TranscriptHistoryStore: ObservableObject {
 
     private func apply(_ page: TranscriptListPage, droppingOptimisticIfMissing: Bool) {
         if let optimistic {
-            if page.items.contains(where: { $0.text == optimistic.text }) {
+            if page.items.contains(where: { Self.normalizedText($0.text) == Self.normalizedText(optimistic.text) }) {
                 self.optimistic = nil
-                items = page.items
+                items = uniquedByText(page.items)
                 return
             }
             if droppingOptimisticIfMissing {
                 self.optimistic = nil
-                items = page.items
+                items = uniquedByText(page.items)
                 return
             }
-            items = [optimistic] + page.items
+            items = uniquedByText([optimistic] + page.items)
             return
         }
-        items = page.items
+        items = uniquedByText(page.items)
+    }
+
+    private static func normalizedText(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func uniquedByText(_ items: [TranscriptItem]) -> [TranscriptItem] {
+        var seen = Set<String>()
+        return items.filter { item in
+            let key = Self.normalizedText(item.text)
+            if seen.contains(key) { return false }
+            seen.insert(key)
+            return true
+        }
     }
 
     private func perform<T>(_ work: () async throws -> T) async throws -> T {

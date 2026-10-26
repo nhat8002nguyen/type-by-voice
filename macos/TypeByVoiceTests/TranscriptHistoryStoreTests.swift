@@ -112,6 +112,47 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(store.items.first?.isOptimistic, true)
     }
 
+    func testDidReceiveFinalDoesNotDuplicateTextAlreadyLoaded() async {
+        let client = FakeTranscriptsClient()
+        client.enqueue(items: [FakeTranscripts.item(id: "srv", text: "spoken")])
+        let store = TranscriptHistoryStore(client: client, retryDelayNanoseconds: 0)
+        await store.load()
+        client.enqueueListError(TranscriptsClientError.unreachable)
+        client.enqueueListError(TranscriptsClientError.unreachable)
+        client.enqueueListError(TranscriptsClientError.unreachable)
+        await store.didReceiveFinal("spoken")
+        XCTAssertEqual(store.items.map(\.text), ["spoken"])
+        XCTAssertEqual(Set(store.items.map(\.id)).count, 1)
+    }
+
+    func testRepeatedFinalDoesNotDuplicateTextWhenRefreshFails() async {
+        let client = FakeTranscriptsClient()
+        let store = TranscriptHistoryStore(client: client, retryDelayNanoseconds: 0)
+        client.enqueue(items: [])
+        client.enqueue(items: [])
+        client.enqueue(items: [])
+        await store.didReceiveFinal("spoken")
+        client.enqueueListError(TranscriptsClientError.unreachable)
+        client.enqueueListError(TranscriptsClientError.unreachable)
+        client.enqueueListError(TranscriptsClientError.unreachable)
+        await store.didReceiveFinal("spoken")
+        XCTAssertEqual(store.items.map(\.text), ["spoken"])
+        XCTAssertEqual(store.items.count, 1)
+    }
+
+    func testLoadDoesNotShowOptimisticAndServerRowForSameText() async {
+        let client = FakeTranscriptsClient()
+        let store = TranscriptHistoryStore(client: client, retryDelayNanoseconds: 0)
+        client.enqueue(items: [])
+        client.enqueue(items: [])
+        client.enqueue(items: [])
+        await store.didReceiveFinal("spoken")
+        client.enqueue(items: [FakeTranscripts.item(id: "srv", text: "spoken")])
+        await store.load()
+        XCTAssertEqual(store.items.map(\.id), ["srv"])
+        XCTAssertEqual(store.items.map(\.text), ["spoken"])
+    }
+
     func testSearchDropsOptimisticWhenServerStillMissing() async {
         let client = FakeTranscriptsClient()
         let store = TranscriptHistoryStore(client: client, retryDelayNanoseconds: 0)
