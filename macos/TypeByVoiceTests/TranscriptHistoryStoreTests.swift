@@ -97,7 +97,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(store.searchQuery, "")
     }
 
-    func testOptimisticKeptWhenRefetchMissesThenDroppedOnLaterLoad() async {
+    func testLoadKeepsOptimisticWhenServerStillMissing() async {
         let client = FakeTranscriptsClient()
         let store = TranscriptHistoryStore(client: client, retryDelayNanoseconds: 0)
         client.enqueue(items: [])
@@ -108,6 +108,19 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(store.items.first?.isOptimistic, true)
         client.enqueue(items: [])
         await store.load()
+        XCTAssertEqual(store.items.first?.text, "ghost")
+        XCTAssertEqual(store.items.first?.isOptimistic, true)
+    }
+
+    func testSearchDropsOptimisticWhenServerStillMissing() async {
+        let client = FakeTranscriptsClient()
+        let store = TranscriptHistoryStore(client: client, retryDelayNanoseconds: 0)
+        client.enqueue(items: [])
+        client.enqueue(items: [])
+        client.enqueue(items: [])
+        await store.didReceiveFinal("ghost")
+        client.enqueue(items: [])
+        await store.search(query: "zzz")
         XCTAssertEqual(store.items, [])
     }
 

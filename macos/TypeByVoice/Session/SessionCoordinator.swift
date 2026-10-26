@@ -336,8 +336,8 @@ final class SessionCoordinator {
                 transition(to: .idle)
                 return
             }
+            onTranscript?(trimmed)
             if destination == .history {
-                onTranscript?(trimmed)
                 transition(to: .idle)
                 return
             }
@@ -346,7 +346,6 @@ final class SessionCoordinator {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 await self.inserter.insert(trimmed)
-                self.onTranscript?(trimmed)
                 if self.state == .inserting {
                     self.transition(to: .idle)
                 }

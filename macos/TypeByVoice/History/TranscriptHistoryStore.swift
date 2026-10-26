@@ -36,7 +36,7 @@ final class TranscriptHistoryStore: ObservableObject {
 
     func load() async {
         searchQuery = ""
-        await fetch(q: nil, droppingOptimisticIfMissing: true)
+        await fetch(q: nil, droppingOptimisticIfMissing: false)
     }
 
     func search(query: String) async {

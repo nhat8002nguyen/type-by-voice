@@ -43,7 +43,9 @@ struct HistoryView: View {
             searchText = history.searchQuery
             Task { await history.load() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+            guard let window = notification.object as? NSWindow,
+                  NSApp.windows.contains(window) else { return }
             Task { await history.load() }
         }
         .onChange(of: searchText) { newValue in

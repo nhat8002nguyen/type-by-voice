@@ -10,6 +10,30 @@ final class FakeInserter: TextInserter {
 }
 
 @MainActor
+final class GatedInserter: TextInserter {
+    private(set) var inserted: [String] = []
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    func insert(_ text: String) async {
+        await withCheckedContinuation { continuation in
+            if released {
+                continuation.resume()
+            } else {
+                self.continuation = continuation
+            }
+        }
+        inserted.append(text)
+    }
+
+    func release() {
+        released = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
 final class SessionCoordinatorTests: XCTestCase {
     func testHotkeyEntersConnectingNotRecording() async {
         let engine = FakeTranscriptionEngine()
@@ -352,6 +376,22 @@ final class SessionCoordinatorTests: XCTestCase {
         await waitUntil { !inserter.inserted.isEmpty && coordinator.state == .idle }
         XCTAssertEqual(inserter.inserted, ["paste me"])
         XCTAssertEqual(transcripts, ["paste me"])
+    }
+
+    func testCursorNotifiesHistoryBeforeInsertCompletes() async {
+        let inserter = GatedInserter()
+        let engine = FakeTranscriptionEngine()
+        var transcripts: [String] = []
+        let coordinator = makeRecording(engine: engine, inserter: inserter, destination: .cursor)
+        coordinator.onTranscript = { transcripts.append($0) }
+        coordinator.hotkeyPressed()
+        engine.emitFinal(text: "paste me")
+        await waitUntil { !transcripts.isEmpty }
+        XCTAssertEqual(transcripts, ["paste me"])
+        XCTAssertEqual(inserter.inserted, [])
+        inserter.release()
+        await waitUntil { coordinator.state == .idle }
+        XCTAssertEqual(inserter.inserted, ["paste me"])
     }
 
     func testEmptyFinalDoesNotNotifyHistory() async {
