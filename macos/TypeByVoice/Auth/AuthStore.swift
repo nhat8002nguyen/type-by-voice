@@ -131,6 +131,7 @@ final class AuthStore {
 
     private var memoryAccessToken: String?
     private var accessExpiresAt: Date?
+    private var inFlightRefresh: Task<Void, Error>?
     private let defaults: UserDefaults
     private static let emailDefaultsKey = "app.typebyvoice.accountEmail"
 
@@ -184,23 +185,26 @@ final class AuthStore {
     }
 
     func refreshIfNeeded() async throws {
-        if let accessExpiresAt, accessExpiresAt > Date().addingTimeInterval(30), accessToken != nil {
+        if hasFreshAccessToken {
             return
         }
-        guard let refresh = keychain.refreshToken else {
-            throw AuthStoreError.missingRefreshToken
+        // Refresh tokens rotate; overlapping POSTs 401 the loser and wipe the new session.
+        if let inFlightRefresh {
+            try await inFlightRefresh.value
+            return
         }
-        // Exactly one refresh attempt per call; do not loop on failure.
-        let body = identityBody(extra: [
-            "refreshToken": refresh,
-        ])
-        let response = try await http.post(path: "/v1/auth/refresh", body: body)
-        try applyTokenResponse(response.json, email: accountEmail)
+        let task = Task { @MainActor in
+            try await self.performRefresh()
+        }
+        inFlightRefresh = task
+        defer { inFlightRefresh = nil }
+        try await task.value
     }
 
     func logout() async throws {
         memoryAccessToken = nil
         accessExpiresAt = nil
+        inFlightRefresh = nil
         keychain.accessToken = nil
         keychain.refreshToken = nil
         defaults.removeObject(forKey: Self.emailDefaultsKey)
@@ -214,6 +218,22 @@ final class AuthStore {
 
     var clientIdentity: ClientIdentity {
         ClientIdentity(platform: platform, clientVersion: clientVersion, deviceId: deviceId)
+    }
+
+    private var hasFreshAccessToken: Bool {
+        guard let accessExpiresAt, accessToken != nil else { return false }
+        return accessExpiresAt > Date().addingTimeInterval(30)
+    }
+
+    private func performRefresh() async throws {
+        guard let refresh = keychain.refreshToken else {
+            throw AuthStoreError.missingRefreshToken
+        }
+        let body = identityBody(extra: [
+            "refreshToken": refresh,
+        ])
+        let response = try await http.post(path: "/v1/auth/refresh", body: body)
+        try applyTokenResponse(response.json, email: accountEmail)
     }
 
     private func identityBody(extra: [String: Any] = [:]) -> [String: Any] {

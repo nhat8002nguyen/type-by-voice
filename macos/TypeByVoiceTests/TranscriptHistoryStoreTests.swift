@@ -86,6 +86,51 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(unauthCount, 1)
     }
 
+    func testConcurrentUnauthorizedLoadsShareRefreshAndStaySignedIn() async {
+        let http = FakeHTTP()
+        http.holdPosts = true
+        http.statusSequence = [200, 401]
+        http.enqueue(json: ["accessToken": "a2", "refreshToken": "r2", "expiresIn": 900])
+        let keychain = FakeKeychain(refresh: "r1", access: "expired")
+        let auth = AuthStore(
+            http: http,
+            keychain: keychain,
+            deviceId: UUID(uuidString: "9c1e4a2b-7d55-4f3a-9e10-2b8c0d1a4f77")!
+        )
+        auth.forceAccessToken("expired")
+
+        let client = FakeTranscriptsClient()
+        client.listUnauthorized = { auth.accessToken == "expired" }
+        client.enqueue(items: [FakeTranscripts.item(id: "1", text: "hello")])
+        client.enqueue(items: [FakeTranscripts.item(id: "1", text: "hello")])
+
+        var unauthCount = 0
+        let store = TranscriptHistoryStore(
+            client: client,
+            refresh: { try await auth.refreshIfNeeded() },
+            retryDelayNanoseconds: 0
+        )
+        store.onUnauthenticated = { unauthCount += 1 }
+
+        let first = Task { await store.load() }
+        let second = Task { await store.load() }
+        let deadline = Date().addingTimeInterval(1)
+        while Date() < deadline, http.heldPostCount < 1 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        for _ in 0..<20 {
+            await Task.yield()
+        }
+        http.releaseHeldPosts()
+        await first.value
+        await second.value
+
+        XCTAssertEqual(unauthCount, 0)
+        XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
+        XCTAssertEqual(store.items.map(\.id), ["1"])
+        XCTAssertEqual(keychain.refreshToken, "r2")
+    }
+
     func testOptimisticPrependThenServerId() async {
         let client = FakeTranscriptsClient()
         let store = TranscriptHistoryStore(client: client, retryDelayNanoseconds: 0)

@@ -5,16 +5,31 @@ import XCTest
 final class FakeHTTP: AuthHTTPClient {
     private var queued: [[String: Any]] = []
     var statusSequence: [Int] = []
+    var holdPosts = false
     private(set) var calls: [String] = []
     private(set) var lastBody: [String: Any] = [:]
+    private var holdContinuations: [CheckedContinuation<Void, Never>] = []
+
+    var heldPostCount: Int { holdContinuations.count }
 
     func enqueue(json: [String: Any]) {
         queued.append(json)
     }
 
+    func releaseHeldPosts() {
+        let waiting = holdContinuations
+        holdContinuations.removeAll()
+        waiting.forEach { $0.resume() }
+    }
+
     func post(path: String, body: [String: Any]) async throws -> AuthHTTPResponse {
         calls.append(path)
         lastBody = body
+        if holdPosts {
+            await withCheckedContinuation { continuation in
+                holdContinuations.append(continuation)
+            }
+        }
         let status = statusSequence.isEmpty ? 200 : statusSequence.removeFirst()
         if status >= 400 {
             throw AuthHTTPError.status(status)
@@ -96,6 +111,40 @@ final class AuthStoreTests: XCTestCase {
         }
         XCTAssertTrue(didThrow)
         XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
+    }
+
+    func testConcurrentRefreshIfNeededSendsOneRequestAndKeepsSession() async throws {
+        let http = FakeHTTP()
+        http.holdPosts = true
+        http.statusSequence = [200, 401]
+        http.enqueue(json: ["accessToken": "a2", "refreshToken": "r2", "expiresIn": 900])
+        let keychain = FakeKeychain(refresh: "r1", access: "expired")
+        let store = AuthStore(http: http, keychain: keychain, deviceId: UUID())
+        store.forceAccessToken("expired")
+
+        let first = Task { try await store.refreshIfNeeded() }
+        let second = Task { try await store.refreshIfNeeded() }
+
+        await waitUntil(timeout: 1) { http.heldPostCount >= 1 }
+        for _ in 0..<20 {
+            await Task.yield()
+        }
+        XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
+        http.releaseHeldPosts()
+
+        try await first.value
+        try await second.value
+        XCTAssertEqual(store.accessToken, "a2")
+        XCTAssertEqual(keychain.refreshToken, "r2")
+        XCTAssertEqual(http.calls.filter { $0.contains("/v1/auth/refresh") }.count, 1)
+    }
+
+    private func waitUntil(timeout: TimeInterval, condition: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     func testLoginMaps401ToInvalidCredentialsMessage() async {

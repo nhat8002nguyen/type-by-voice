@@ -5,6 +5,7 @@ import Foundation
 final class FakeTranscriptsClient: TranscriptsServing {
     var pages: [Result<TranscriptListPage, Error>] = []
     var deleteResults: [Result<Void, Error>] = []
+    var listUnauthorized: (() -> Bool)?
     private(set) var listQueries: [String?] = []
     private(set) var deleteCount = 0
 
@@ -20,6 +21,9 @@ final class FakeTranscriptsClient: TranscriptsServing {
         listQueries.append(q)
         _ = limit
         _ = cursor
+        if listUnauthorized?() == true {
+            throw TranscriptsClientError.unauthorized
+        }
         guard !pages.isEmpty else {
             return TranscriptListPage(items: [], nextCursor: nil)
         }
